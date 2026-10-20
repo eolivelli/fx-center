@@ -423,6 +423,10 @@ final class MainWindow extends JFrame implements ShowController.Listener {
                 nowPlaying.setText("…  " + playing.title());
                 nowPlaying.setForeground(Color.DARK_GRAY);
                 break;
+            case FADING:
+                nowPlaying.setText("▼  " + playing.title() + "  (sfuma…)");
+                nowPlaying.setForeground(RED);
+                break;
             default:
                 Cue next = controller.selectedCue();
                 nowPlaying.setText(next == null ? " " : "Prossimo:  " + next.title());

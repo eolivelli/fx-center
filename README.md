@@ -70,9 +70,9 @@ the debug APK to the GitHub release. Bump `versionCode`/`versionName` in
 Manual checks on a developer machine (they need a sound card / a display):
 
 ```sh
-java -cp desktop/target/test-classes:desktop/target/fx-center-0.1.0-SNAPSHOT.jar \
+java -cp desktop/target/test-classes:desktop/target/fx-center-0.2.0-SNAPSHOT.jar \
     dev.olivelli.fxcenter.desktop.PlayCheck some.mp3
-java -Dfxcenter.home=/tmp/fxh -jar desktop/target/fx-center-0.1.0-SNAPSHOT.jar
+java -Dfxcenter.home=/tmp/fxh -jar desktop/target/fx-center-0.2.0-SNAPSHOT.jar
 ```
 
 ## Licence

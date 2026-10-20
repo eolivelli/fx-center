@@ -6,7 +6,7 @@
 
   <groupId>dev.olivelli.fxcenter</groupId>
   <artifactId>fx-center-parent</artifactId>
-  <version>0.1.0-SNAPSHOT</version>
+  <version>0.2.0-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>FX Center</name>
   <description>Theatre cue player: plays a folder of music and sound effects, locally or cached from Google Drive.</description>

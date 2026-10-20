@@ -1,6 +1,7 @@
 package dev.olivelli.fxcenter.core;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -84,13 +85,13 @@ class ShowControllerTest {
         ctl.go();
         assertEquals(ShowController.State.PLAYING, ctl.state());
         assertEquals(0, ctl.playingIndex());
-        assertEquals(List.of("stop", "play MUS-01.mp3"), player.calls);
+        assertEquals(List.of("stop", "volume 1.0", "play MUS-01.mp3"), player.calls);
 
         player.listener.finished();
         assertEquals(ShowController.State.IDLE, ctl.state());
         assertEquals(-1, ctl.playingIndex());
         assertEquals(1, ctl.selectedIndex());
-        assertEquals(2, player.calls.size(), "finishing must not start the next cue");
+        assertFalse(String.join(",", player.calls).contains("play MUS-02"), "finishing must not start the next cue");
         assertTrue(errors.isEmpty());
     }
 
@@ -98,6 +99,7 @@ class ShowControllerTest {
     void stopKeepsTheSelectionAndFinishingOnTheLastCueStaysThere() {
         ctl.setSource(new FakeSource(library("a.mp3", "b.mp3")));
         ctl.refresh();
+        ctl.setFadeMillis(0);
         ctl.select(1);
         ctl.go();
         ctl.stop();
@@ -120,7 +122,7 @@ class ShowControllerTest {
         assertEquals(ShowController.State.PAUSED, ctl.state());
         ctl.pauseOrResume();
         assertEquals(ShowController.State.PLAYING, ctl.state());
-        assertEquals(List.of("stop", "play a.mp3", "pause", "resume"), player.calls);
+        assertEquals(List.of("stop", "volume 1.0", "play a.mp3", "pause", "resume"), player.calls);
     }
 
     @Test
@@ -174,6 +176,96 @@ class ShowControllerTest {
         assertEquals(List.of("b.mp3", "a.mp3"), src.fetched);
         ctl.downloadAll(Progress.NONE);
         assertEquals(2, src.fetched.size());
+    }
+
+    private void awaitIdle() throws InterruptedException {
+        long deadline = System.currentTimeMillis() + 5000;
+        while (ctl.state() != ShowController.State.IDLE && System.currentTimeMillis() < deadline) {
+            Thread.sleep(5);
+        }
+        assertEquals(ShowController.State.IDLE, ctl.state());
+    }
+
+    private List<Double> volumesSet() {
+        List<Double> v = new ArrayList<>();
+        for (String c : player.calls) {
+            if (c.startsWith("volume ")) {
+                v.add(Double.parseDouble(c.substring(7)));
+            }
+        }
+        return v;
+    }
+
+    @Test
+    void stopFadesOutThenStopsAndRestoresTheVolume() throws InterruptedException {
+        ctl.setSource(new FakeSource(library("a.mp3")));
+        ctl.refresh();
+        ctl.setVolume(0.8);
+        ctl.setFadeMillis(100);
+        ctl.go();
+        player.calls.clear();
+
+        ctl.stop();
+        assertEquals(ShowController.State.FADING, ctl.state());
+        assertEquals(0, ctl.playingIndex(), "still the playing cue while it fades");
+        awaitIdle();
+
+        List<Double> volumes = volumesSet();
+        assertTrue(volumes.size() >= 10, "steps: " + volumes);
+        for (int i = 1; i < volumes.size() - 1; i++) {
+            assertTrue(volumes.get(i) <= volumes.get(i - 1), "monotonic: " + volumes);
+        }
+        assertEquals(0.0, volumes.get(volumes.size() - 2), 1e-9);
+        assertEquals(0.8, volumes.get(volumes.size() - 1), 1e-9, "restored after the stop");
+        assertEquals("stop", player.calls.get(player.calls.size() - 2));
+        assertEquals(-1, ctl.playingIndex());
+        assertEquals(0, ctl.selectedIndex());
+    }
+
+    @Test
+    void secondStopDuringFadeCutsAtOnce() throws InterruptedException {
+        ctl.setSource(new FakeSource(library("a.mp3")));
+        ctl.refresh();
+        ctl.setFadeMillis(10_000);
+        ctl.go();
+        ctl.stop();
+        assertEquals(ShowController.State.FADING, ctl.state());
+        ctl.stop();
+        assertEquals(ShowController.State.IDLE, ctl.state());
+        assertEquals(1.0, volumesSet().get(volumesSet().size() - 1), 1e-9);
+        Thread.sleep(50);
+        assertEquals(ShowController.State.IDLE, ctl.state(), "the abandoned fade must not come back");
+    }
+
+    @Test
+    void goDuringFadeStartsTheNextCueImmediately() throws InterruptedException {
+        ctl.setSource(new FakeSource(library("a.mp3", "b.mp3")));
+        ctl.refresh();
+        ctl.setFadeMillis(10_000);
+        ctl.go();
+        ctl.stop();
+        ctl.select(1);
+        ctl.go();
+        assertEquals(ShowController.State.PLAYING, ctl.state());
+        assertEquals(1, ctl.playingIndex());
+        assertEquals("play b.mp3", player.calls.get(player.calls.size() - 1));
+        Thread.sleep(50);
+        assertEquals(ShowController.State.PLAYING, ctl.state());
+    }
+
+    @Test
+    void stopWhilePausedOrWithFadeDisabledIsImmediate() {
+        ctl.setSource(new FakeSource(library("a.mp3")));
+        ctl.refresh();
+        ctl.go();
+        ctl.pauseOrResume();
+        ctl.stop();
+        assertEquals(ShowController.State.IDLE, ctl.state());
+
+        ctl.setFadeMillis(0);
+        ctl.go();
+        ctl.stop();
+        assertEquals(ShowController.State.IDLE, ctl.state());
     }
 
     @Test

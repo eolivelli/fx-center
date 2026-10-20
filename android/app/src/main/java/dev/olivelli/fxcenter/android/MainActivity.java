@@ -273,6 +273,10 @@ public final class MainActivity extends Activity implements ShowController.Liste
                 nowPlaying.setText("…  " + playing.title());
                 nowPlaying.setTextColor(getColor(R.color.pause));
                 break;
+            case FADING:
+                nowPlaying.setText("▼  " + playing.title() + "  (sfuma…)");
+                nowPlaying.setTextColor(getColor(R.color.stop));
+                break;
             default:
                 Cue next = controller.selectedCue();
                 nowPlaying.setText(next == null ? " " : "Prossimo:  " + next.title());
