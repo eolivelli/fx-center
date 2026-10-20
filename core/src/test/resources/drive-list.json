@@ -1,0 +1,51 @@
+{
+  "files": [
+    {
+      "mimeType": "application/vnd.google-apps.document",
+      "webViewLink": "https://docs.google.com/document/d/1ybE-7BwfstUOrUXwN_c9DiIeAt58a1sfxnB-CIt-3Tc/edit?usp=drivesdk",
+      "size": "46905",
+      "id": "1ybE-7BwfstUOrUXwN_c9DiIeAt58a1sfxnB-CIt-3Tc",
+      "name": "La Fabbrica di Cioccolato",
+      "modifiedTime": "2026-10-13T21:10:51.052Z"
+    },
+    {
+      "mimeType": "application/vnd.google-apps.folder",
+      "id": "folder-1",
+      "name": "vecchie versioni"
+    },
+    {
+      "md5Checksum": "dff6a37eca720336762fab6608e82c03",
+      "mimeType": "audio/mpeg",
+      "webViewLink": "https://drive.google.com/file/d/1BqBgsPWM3ppUkbGXue3x7fUYxTjosJw6/view?usp=drivesdk",
+      "size": "4538493",
+      "id": "1BqBgsPWM3ppUkbGXue3x7fUYxTjosJw6",
+      "name": "MUS-10 Tema di Charlie.mp3",
+      "modifiedTime": "2026-10-20T08:44:16.598Z"
+    },
+    {
+      "md5Checksum": "188a197306ebbc6345f44fbcff1dd352",
+      "mimeType": "audio/mpeg",
+      "webViewLink": "https://drive.google.com/file/d/1-eRamYNGJTdyWKdP1_2FOkCMeawLKKQc/view?usp=drivesdk",
+      "size": "6018813",
+      "id": "1-eRamYNGJTdyWKdP1_2FOkCMeawLKKQc",
+      "name": "MUS-2 Sigla dei narratori.mp3",
+      "modifiedTime": "2026-10-20T08:44:16.591Z"
+    },
+    {
+      "md5Checksum": "a56290311e530483a45905c2402c805c",
+      "mimeType": "audio/vnd.wave",
+      "webViewLink": "https://drive.google.com/file/d/1MBjdpt029jThqTpG5VfvmHLrOOW-RCE3/view?usp=drivesdk",
+      "size": "987884",
+      "id": "1MBjdpt029jThqTpG5VfvmHLrOOW-RCE3",
+      "name": "SFX-01 Vento tra le assi.wav",
+      "modifiedTime": "2026-10-20T08:44:16.602Z"
+    },
+    {
+      "mimeType": "application/pdf",
+      "webViewLink": "https://drive.google.com/file/d/pdf-1/view?usp=drivesdk",
+      "size": "1000",
+      "id": "pdf-1",
+      "name": "Scaletta.pdf"
+    }
+  ]
+}

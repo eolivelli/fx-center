@@ -1,0 +1,72 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'dev.olivelli.fxcenter.android'
+    compileSdk = 35
+
+    defaultConfig {
+        applicationId = 'dev.olivelli.fxcenter'
+        // Android 8: java.nio.file, which core uses throughout, arrived in API 26.
+        minSdk = 26
+        targetSdk = 35
+        // Bump per release: an update must not carry a versionCode below the installed one.
+        versionCode = 1
+        versionName = '0.1.0'
+    }
+
+    compileOptions {
+        // core is written for JDK 11 and compiled here from source.
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+
+    sourceSets {
+        // The shared module, compiled into the app directly rather than
+        // consumed as a jar: no mavenLocal, no install step, no stale snapshot.
+        main.java.srcDirs += '../../core/src/main/java'
+    }
+
+    signingConfigs {
+        // The committed keystore, so every machine and every CI run signs
+        // identically and one release installs as an update over another. A
+        // debug keystore is not a secret: its passwords are the Android defaults.
+        debug {
+            storeFile = file('debug.keystore')
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
+        }
+    }
+
+    buildTypes {
+        debug {
+            // Debug only, on purpose: a debug-signed APK installs on a real
+            // phone without CI holding any secret.
+            minifyEnabled = false
+            signingConfig = signingConfigs.debug
+        }
+    }
+
+    packaging {
+        resources {
+            excludes += ['META-INF/LICENSE*', 'META-INF/NOTICE*', 'META-INF/DEPENDENCIES', 'META-INF/versions/**']
+        }
+    }
+
+    testOptions {
+        unitTests {
+            returnDefaultValues = true
+        }
+    }
+}
+
+dependencies {
+    // core's one dependency.
+    implementation 'com.google.code.gson:gson:2.11.0'
+    // Edge-to-edge insets on Android 15, as in MwActivity.
+    implementation 'androidx.core:core:1.13.1'
+
+    testImplementation 'junit:junit:4.13.2'
+}

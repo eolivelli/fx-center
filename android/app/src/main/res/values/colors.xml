@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#1256cc</color>
+    <color name="accent">#2e7d32</color>
+    <color name="background">#fafafa</color>
+    <color name="go">#2e7d32</color>
+    <color name="stop">#c62828</color>
+    <color name="pause">#555555</color>
+    <color name="music">#1256cc</color>
+    <color name="effect">#0a7a5c</color>
+    <color name="other">#212121</color>
+    <color name="missing">#9e9e9e</color>
+    <color name="selected_bg">#dbe7ff</color>
+    <color name="playing_bg">#fff3c4</color>
+    <color name="error">#c62828</color>
+</resources>

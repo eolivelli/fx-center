@@ -1,0 +1,21 @@
+// Standalone Gradle build for the Android app. The Maven reactor does not
+// build it; the app compiles core's sources directly (see app/build.gradle),
+// so there is nothing to install first.
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode = RepositoriesMode.FAIL_ON_PROJECT_REPOS
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+rootProject.name = 'fx-center-android'
+include ':app'

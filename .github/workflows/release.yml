@@ -1,0 +1,53 @@
+# Fires on v* tags: builds the desktop uber jar and the debug APK and attaches
+# both to the GitHub release for that tag. The APK is debug-signed on purpose,
+# with the committed android/app/debug.keystore: it installs on any phone with
+# no signing secret in CI, and every release signs identically, so one
+# installs as an update over the previous one.
+name: release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Two JDKs, in this order: Maven builds on 11, the Android Gradle plugin
+      # needs 17, and the last setup-java wins for JAVA_HOME.
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: temurin
+          cache: maven
+      - name: Build the desktop jar
+        run: mvn -B --no-transfer-progress verify
+
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: temurin
+          cache: gradle
+      - name: Build the Android APK
+        working-directory: android
+        run: ./gradlew --no-daemon test assembleDebug
+
+      - name: Name the files after the tag
+        run: |
+          mkdir -p dist
+          cp desktop/target/fx-center-*.jar "dist/fx-center-${GITHUB_REF_NAME}.jar"
+          cp android/app/build/outputs/apk/debug/app-debug.apk "dist/fx-center-${GITHUB_REF_NAME}-android-debug.apk"
+          ls -la dist
+
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" --generate-notes \
+            --title "FX Center $GITHUB_REF_NAME" dist/* \
+            || gh release upload "$GITHUB_REF_NAME" dist/* --clobber

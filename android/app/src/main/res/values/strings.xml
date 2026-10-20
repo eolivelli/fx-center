@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">FX Center</string>
+    <string name="go">▶  VAI</string>
+    <string name="stop">■  STOP</string>
+    <string name="pause">❚❚  PAUSA</string>
+    <string name="resume">▶  RIPRENDI</string>
+    <string name="refresh">Aggiorna</string>
+    <string name="documents">Documenti</string>
+    <string name="drive">Drive…</string>
+    <string name="drive_prompt">Incolla il link della cartella di Google Drive (condivisa con \"chiunque abbia il link\")</string>
+    <string name="drive_bad_link">Non sembra un link di una cartella di Google Drive</string>
+    <string name="no_documents">Nessun documento nella cartella</string>
+    <string name="volume">Volume</string>
+    <string name="ok">OK</string>
+    <string name="cancel">Annulla</string>
+</resources>
