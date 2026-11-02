@@ -3,7 +3,6 @@ package dev.olivelli.fxcenter.desktop;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 
 /** Entry point of the desktop app. */
 public final class FxCenterApp {
@@ -18,11 +17,7 @@ public final class FxCenterApp {
     }
 
     public static void main(String[] args) {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception e) {
-            // the default look is fine too
-        }
+        Theme.install();
         SwingUtilities.invokeLater(() -> new MainWindow(homeDir()).setVisible(true));
     }
 }

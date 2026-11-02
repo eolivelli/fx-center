@@ -50,12 +50,12 @@ import javax.swing.Timer;
  */
 final class ClipEditor extends JDialog {
 
-    private static final Color OUTSIDE = new Color(0xe0e0e0);
-    private static final Color WAVE_IN = new Color(0x1256cc);
-    private static final Color WAVE_OUT = new Color(0xa8b4c8);
-    private static final Color HANDLE = new Color(0x2e7d32);
-    private static final Color HANDLE_END = new Color(0xc62828);
-    private static final Color PLAYHEAD = new Color(0xff8f00);
+    private static final Color OUTSIDE = new Color(0x0d0f12);
+    private static final Color WAVE_IN = Theme.WAVE_IN;
+    private static final Color WAVE_OUT = Theme.WAVE_OUT;
+    private static final Color HANDLE = Theme.HANDLE_START;
+    private static final Color HANDLE_END = Theme.HANDLE_END;
+    private static final Color PLAYHEAD = Theme.ACCENT;
     private static final long NUDGE = 100;
     private static final long NUDGE_BIG = 1000;
     private static final long FINALE = 5000;
@@ -63,7 +63,7 @@ final class ClipEditor extends JDialog {
     private enum Handle { START, END }
 
     private static final String HINT = "<html>Clic sull'onda: ascolta da lì. Trascina la maniglia "
-            + "<font color=#2e7d32><b>verde</b></font> (inizio) e quella <font color=#c62828><b>rossa</b></font> (fine)."
+            + "<font color=#5cbf7d><b>verde</b></font> (inizio) e quella <font color=#e0685c><b>rossa</b></font> (fine)."
             + "<br><b>[</b> e <b>]</b>: inizio e fine dove sta suonando adesso &nbsp;·&nbsp; <b>←/→</b> ±0,1 s, "
             + "<b>Maiusc</b> ±1 s &nbsp;·&nbsp; <b>Spazio</b> ascolta/ferma</html>";
 
@@ -141,8 +141,8 @@ final class ClipEditor extends JDialog {
         root.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
         setContentPane(root);
 
-        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 12f));
-        hint.setForeground(Color.DARK_GRAY);
+        hint.setFont(Theme.font(12f, Font.PLAIN));
+        hint.setForeground(Theme.TEXT_DIM);
         hint.setText(HINT);
         root.add(hint, BorderLayout.NORTH);
 
@@ -166,7 +166,8 @@ final class ClipEditor extends JDialog {
         times.add(endField);
         times.add(setEnd);
         times.add(Box.createHorizontalStrut(16));
-        lengthLabel.setFont(lengthLabel.getFont().deriveFont(Font.BOLD, 14f));
+        lengthLabel.setFont(Theme.font(14f, Font.BOLD));
+        lengthLabel.setForeground(Theme.ACCENT);
         times.add(lengthLabel);
         startField.addActionListener(e -> {
             typed(startField, Handle.START);
@@ -212,7 +213,7 @@ final class ClipEditor extends JDialog {
         JButton cancel = new JButton("Annulla");
         cancel.addActionListener(e -> dispose());
         JButton ok = new JButton("OK");
-        ok.setFont(ok.getFont().deriveFont(Font.BOLD));
+        ok.setFont(Theme.font(13f, Font.BOLD));
         ok.addActionListener(e -> accept());
         close.add(remove);
         close.add(Box.createHorizontalStrut(12));
@@ -321,9 +322,9 @@ final class ClipEditor extends JDialog {
         try {
             long t = text.isEmpty() ? (h == Handle.START ? 0 : duration) : parse(text);
             set(h, t);
-            hint.setForeground(Color.DARK_GRAY);
+            hint.setForeground(Theme.TEXT_DIM);
         } catch (IllegalArgumentException e) {
-            hint.setForeground(Color.RED);
+            hint.setForeground(Theme.ERROR);
             hint.setText("Tempo non valido: \"" + text + "\" (scrivi per esempio 1:23.4)");
             refreshFields();
         }
@@ -482,10 +483,10 @@ final class ClipEditor extends JDialog {
             g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
             int w = getWidth();
             int h = getHeight() - RULER;
-            g.setColor(Color.WHITE);
+            g.setColor(Theme.WAVE_BG);
             g.fillRect(0, 0, w, getHeight());
             if (!ready()) {
-                g.setColor(Color.GRAY);
+                g.setColor(Theme.TEXT_DIM);
                 g.drawString("Carico l'onda del brano…", 12, h / 2);
                 g.dispose();
                 return;
@@ -509,7 +510,7 @@ final class ClipEditor extends JDialog {
             // the end fade, so it is clear where the music starts to drop
             if (end < duration) {
                 int xf = xOf(Math.max(start, end - dev.olivelli.fxcenter.core.Clip.END_FADE_MILLIS));
-                g.setColor(new Color(198, 40, 40, 50));
+                g.setColor(new Color(224, 104, 92, 45));
                 g.fill(new Polygon(new int[]{xf, xe, xe}, new int[]{0, 0, h}, 3));
             }
 
@@ -524,7 +525,7 @@ final class ClipEditor extends JDialog {
             }
 
             // ruler: a tick every 10 s, a label every 30 s (every 10 s for short files)
-            g.setColor(Color.GRAY);
+            g.setColor(Theme.TEXT_FAINT);
             g.setStroke(new BasicStroke(1f));
             g.drawLine(0, h, w, h);
             g.setFont(getFont().deriveFont(10f));
@@ -550,7 +551,7 @@ final class ClipEditor extends JDialog {
             int tw = g.getFontMetrics().stringWidth(label);
             int lx = leftSide ? x + 8 : x - 8 - tw;
             lx = Math.max(2, Math.min(getWidth() - tw - 2, lx));
-            g.setColor(new Color(255, 255, 255, 225));
+            g.setColor(new Color(17, 19, 22, 230));
             g.fillRoundRect(lx - 4, 12, tw + 8, 19, 6, 6);
             g.setColor(c);
             g.drawString(label, lx, 26);

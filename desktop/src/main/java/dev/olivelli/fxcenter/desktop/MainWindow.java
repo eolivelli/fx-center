@@ -42,7 +42,7 @@ import javax.swing.AbstractAction;
 import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
-import javax.swing.DefaultListCellRenderer;
+import javax.swing.ListCellRenderer;
 import javax.swing.DefaultListModel;
 import javax.swing.JButton;
 import javax.swing.JComponent;
@@ -70,12 +70,6 @@ import javax.swing.Timer;
  */
 final class MainWindow extends JFrame implements ShowController.Listener {
 
-    private static final Color GREEN = new Color(0x2e7d32);
-    private static final Color RED = new Color(0xc62828);
-    private static final Color MUSIC = new Color(0x1256cc);
-    private static final Color EFFECT = new Color(0x0a7a5c);
-    private static final Color PLAYING_BG = new Color(0xfff3c4);
-
     private final Path homeDir;
     private final Settings settings;
     private final ShowController controller;
@@ -88,13 +82,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     private final DefaultListModel<Cue> model = new DefaultListModel<>();
     private final JList<Cue> list = new JList<>(model);
     private final JLabel sourceLabel = new JLabel();
+    private final JLabel nowLabel = new JLabel("PROSSIMO");
     private final JLabel nowPlaying = new JLabel(" ");
     private final JLabel status = new JLabel(" ");
-    private final JLabel time = new JLabel("0:00 / 0:00");
+    private final JLabel time = new JLabel(" ");
     private final JProgressBar progress = new JProgressBar(0, 1000);
-    private final JButton goButton = bigButton("▶  VAI", GREEN);
-    private final JButton stopButton = bigButton("■  STOP", RED);
-    private final JButton pauseButton = bigButton("❚❚  PAUSA", new Color(0x555555));
+    private final JButton goButton = bigButton("▶  VAI", Theme.GO);
+    private final JButton stopButton = bigButton("■  STOP", Theme.STOP);
+    private final JButton pauseButton = bigButton("❚❚  PAUSA", Theme.PAUSE);
     private final JButton docsButton = new JButton("Documenti ▾");
     private final JButton editButton = new JButton("✎ Modifica scaletta");
     private final List<JButton> sourceButtons = new ArrayList<>();
@@ -159,21 +154,31 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     // --- building --------------------------------------------------------
 
     private void buildUi() {
-        JPanel root = new JPanel(new BorderLayout(8, 8));
-        root.setBorder(BorderFactory.createEmptyBorder(8, 8, 8, 8));
+        JPanel root = new JPanel(new BorderLayout(0, 10));
+        root.setBorder(BorderFactory.createEmptyBorder(10, 12, 10, 12));
+        root.setBackground(Theme.BG);
         setContentPane(root);
 
-        // Top: where the files come from, and the few setup actions.
-        JPanel top = new JPanel(new BorderLayout(8, 0));
-        sourceLabel.setFont(sourceLabel.getFont().deriveFont(Font.PLAIN, 13f));
+        // Top: the name, where the files come from, and the few setup actions.
+        JPanel top = new JPanel(new BorderLayout(12, 0));
+        top.setOpaque(false);
+        JLabel brand = new JLabel("FX CENTER");
+        brand.setFont(Theme.font(15f, Font.BOLD));
+        brand.setForeground(Theme.ACCENT);
+        top.add(brand, BorderLayout.WEST);
+        sourceLabel.setFont(Theme.font(12f, Font.PLAIN));
+        sourceLabel.setForeground(Theme.TEXT_DIM);
         top.add(sourceLabel, BorderLayout.CENTER);
         JPanel actions = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
-        JButton local = new JButton("Cartella locale…");
+        actions.setOpaque(false);
+        JButton local = toolButton("Cartella locale…");
         local.addActionListener(e -> chooseLocalFolder());
-        JButton drive = new JButton("Google Drive…");
+        JButton drive = toolButton("Google Drive…");
         drive.addActionListener(e -> chooseDriveFolder());
-        JButton refresh = new JButton("Aggiorna");
+        JButton refresh = toolButton("⟳  Aggiorna");
         refresh.addActionListener(e -> refreshAndDownload());
+        styleTool(docsButton);
+        styleTool(editButton);
         docsButton.addActionListener(e -> showDocuments());
         editButton.setToolTipText("Cambia l'ordine dei brani e scegli quale parte di ciascuno suonare");
         editButton.addActionListener(e -> startEditing());
@@ -189,6 +194,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         top.add(actions, BorderLayout.EAST);
 
         JPanel north = new JPanel();
+        north.setOpaque(false);
         north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
         top.setAlignmentX(Component.LEFT_ALIGNMENT);
         north.add(top);
@@ -200,8 +206,9 @@ final class MainWindow extends JFrame implements ShowController.Listener {
 
         // Centre: the list, big.
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        list.setFont(list.getFont().deriveFont(Font.PLAIN, 22f));
-        list.setFixedCellHeight(44);
+        list.setFont(Theme.font(21f, Font.PLAIN));
+        list.setFixedCellHeight(48);
+        list.setBackground(Theme.SURFACE);
         list.setCellRenderer(new CueRenderer());
         list.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && !syncingSelection && list.getSelectedIndex() >= 0) {
@@ -247,27 +254,54 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         };
         list.addMouseListener(mouse);
         list.addMouseMotionListener(mouse);
-        root.add(new JScrollPane(list), BorderLayout.CENTER);
+        JScrollPane scroll = new JScrollPane(list);
+        scroll.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
+        scroll.getViewport().setBackground(Theme.SURFACE);
+        root.add(scroll, BorderLayout.CENTER);
 
-        // Bottom: transport.
+        // Bottom: what plays (a card), then the transport.
         JPanel bottom = new JPanel();
+        bottom.setOpaque(false);
         bottom.setLayout(new BoxLayout(bottom, BoxLayout.Y_AXIS));
 
-        nowPlaying.setFont(nowPlaying.getFont().deriveFont(Font.BOLD, 18f));
+        JPanel card = new JPanel();
+        card.setLayout(new BoxLayout(card, BoxLayout.Y_AXIS));
+        card.setBackground(Theme.RAISED);
+        card.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(Theme.BORDER),
+                BorderFactory.createEmptyBorder(8, 12, 10, 12)));
+        card.setAlignmentX(Component.LEFT_ALIGNMENT);
+        nowLabel.setFont(Theme.font(11f, Font.BOLD));
+        nowLabel.setForeground(Theme.TEXT_DIM);
+        nowLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
+        card.add(nowLabel);
+        card.add(Box.createVerticalStrut(2));
+        nowPlaying.setFont(Theme.font(20f, Font.BOLD));
         nowPlaying.setAlignmentX(Component.LEFT_ALIGNMENT);
-        bottom.add(nowPlaying);
-        bottom.add(Box.createVerticalStrut(4));
-
-        JPanel progressRow = new JPanel(new BorderLayout(8, 0));
+        card.add(nowPlaying);
+        card.add(Box.createVerticalStrut(8));
+        JPanel progressRow = new JPanel(new BorderLayout(10, 0));
+        progressRow.setOpaque(false);
         progressRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        progress.setPreferredSize(new Dimension(100, 14));
-        progressRow.add(progress, BorderLayout.CENTER);
-        time.setFont(time.getFont().deriveFont(Font.PLAIN, 14f));
+        progress.setPreferredSize(new Dimension(100, 6));
+        // Wrapped, so the bar keeps its thin height instead of the row's.
+        JPanel bar = new JPanel(new java.awt.GridBagLayout());
+        bar.setOpaque(false);
+        java.awt.GridBagConstraints gc = new java.awt.GridBagConstraints();
+        gc.fill = java.awt.GridBagConstraints.HORIZONTAL;
+        gc.weightx = 1;
+        bar.add(progress, gc);
+        progressRow.add(bar, BorderLayout.CENTER);
+        time.setFont(Theme.font(14f, Font.PLAIN));
+        time.setForeground(Theme.TEXT_DIM);
         progressRow.add(time, BorderLayout.EAST);
-        bottom.add(progressRow);
-        bottom.add(Box.createVerticalStrut(8));
+        card.add(progressRow);
+        card.setMaximumSize(new Dimension(Integer.MAX_VALUE, card.getPreferredSize().height + 20));
+        bottom.add(card);
+        bottom.add(Box.createVerticalStrut(10));
 
-        JPanel buttons = new JPanel(new GridLayout(1, 3, 8, 0));
+        JPanel buttons = new JPanel(new GridLayout(1, 3, 10, 0));
+        buttons.setOpaque(false);
         buttons.setAlignmentX(Component.LEFT_ALIGNMENT);
         goButton.addActionListener(e -> go());
         stopButton.addActionListener(e -> run(controller::stop));
@@ -279,9 +313,12 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         bottom.add(buttons);
         bottom.add(Box.createVerticalStrut(8));
 
-        JPanel volumeRow = new JPanel(new BorderLayout(8, 0));
+        JPanel volumeRow = new JPanel(new BorderLayout(10, 0));
+        volumeRow.setOpaque(false);
         volumeRow.setAlignmentX(Component.LEFT_ALIGNMENT);
-        JLabel volLabel = new JLabel("Volume");
+        JLabel volLabel = new JLabel("VOLUME");
+        volLabel.setFont(Theme.font(11f, Font.BOLD));
+        volLabel.setForeground(Theme.TEXT_DIM);
         volumeRow.add(volLabel, BorderLayout.WEST);
         JSlider volume = new JSlider(0, 100, (int) Math.round(settings.volume() * 100));
         volume.addChangeListener(e -> {
@@ -292,12 +329,21 @@ final class MainWindow extends JFrame implements ShowController.Listener {
                 saveSettings();
             }
         });
+        volume.setOpaque(false);
         volumeRow.add(volume, BorderLayout.CENTER);
+        JLabel volValue = new JLabel(volume.getValue() + "%");
+        volValue.setFont(Theme.font(12f, Font.PLAIN));
+        volValue.setForeground(Theme.TEXT_DIM);
+        volValue.setPreferredSize(new Dimension(40, volValue.getPreferredSize().height));
+        volume.addChangeListener(e -> volValue.setText(volume.getValue() + "%"));
+        volumeRow.add(volValue, BorderLayout.EAST);
+        volumeRow.setMaximumSize(new Dimension(Integer.MAX_VALUE, volumeRow.getPreferredSize().height));
         bottom.add(volumeRow);
-        bottom.add(Box.createVerticalStrut(4));
+        bottom.add(Box.createVerticalStrut(6));
 
         status.setAlignmentX(Component.LEFT_ALIGNMENT);
-        status.setFont(status.getFont().deriveFont(Font.PLAIN, 12f));
+        status.setFont(Theme.font(12f, Font.PLAIN));
+        status.setForeground(Theme.TEXT_DIM);
         bottom.add(status);
         root.add(bottom, BorderLayout.SOUTH);
 
@@ -321,14 +367,31 @@ final class MainWindow extends JFrame implements ShowController.Listener {
 
     private static JButton bigButton(String text, Color bg) {
         JButton b = new JButton(text);
-        b.setFont(b.getFont().deriveFont(Font.BOLD, 26f));
+        b.setFont(Theme.font(24f, Font.BOLD));
         b.setBackground(bg);
-        b.setForeground(Color.WHITE);
-        b.setOpaque(true);
-        b.setBorderPainted(false);
+        b.setForeground(Theme.ON_FILL);
         b.setFocusPainted(false);
-        b.setPreferredSize(new Dimension(200, 80));
+        b.setFocusable(false);
+        b.putClientProperty("JButton.buttonType", "roundRect");
+        b.putClientProperty("FlatLaf.style", "arc: 12; borderWidth: 0; focusWidth: 0; innerFocusWidth: 0;"
+                + " hoverBackground: lighten(" + Theme.hex(bg) + ",5%);"
+                + " pressedBackground: lighten(" + Theme.hex(bg) + ",10%);"
+                + " disabledBackground: " + Theme.hex(Theme.SURFACE) + ";"
+                + " disabledText: " + Theme.hex(Theme.TEXT_FAINT));
+        b.setPreferredSize(new Dimension(200, 78));
         return b;
+    }
+
+    private static JButton toolButton(String text) {
+        JButton b = new JButton(text);
+        styleTool(b);
+        return b;
+    }
+
+    /** The small buttons of the top bar: quiet, so the eye goes to the list and the transport. */
+    private static void styleTool(JButton b) {
+        b.setFont(Theme.font(13f, Font.PLAIN));
+        b.setFocusable(false);
     }
 
     private static void bind(JComponent c, KeyStroke key, String name, Runnable r) {
@@ -348,13 +411,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     // --- editing the scaletta -------------------------------------------
 
     private void buildEditBar() {
-        editBar.setBackground(new Color(0xfff8e1));
+        editBar.setBackground(Theme.ACCENT_BG);
         editBar.setBorder(BorderFactory.createCompoundBorder(
-                BorderFactory.createLineBorder(new Color(0xffb300)),
-                BorderFactory.createEmptyBorder(6, 10, 6, 10)));
-        JLabel hint = new JLabel("<html><b>Modifica scaletta.</b> Trascina un brano per spostarlo (o Alt+↑/↓). "
-                + "Doppio clic o ✂ per scegliere la parte da suonare.</html>");
-        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 13f));
+                BorderFactory.createMatteBorder(0, 3, 0, 0, Theme.ACCENT),
+                BorderFactory.createEmptyBorder(8, 12, 8, 10)));
+        JLabel hint = new JLabel("<html><font color=" + Theme.hex(Theme.ACCENT) + "><b>MODIFICA SCALETTA</b></font><br>"
+                + "Trascina un brano per spostarlo (o Alt+↑/↓). Doppio clic o ✂ per scegliere la parte da suonare.</html>");
+        hint.setFont(Theme.font(13f, Font.PLAIN));
+        hint.setForeground(Theme.TEXT);
         editBar.add(hint, BorderLayout.CENTER);
         JPanel b = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
         b.setOpaque(false);
@@ -369,7 +433,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         clip.addActionListener(e -> editClip());
         JButton cancel = new JButton("Annulla");
         cancel.addActionListener(e -> cancelEditing());
-        saveButton.setFont(saveButton.getFont().deriveFont(Font.BOLD));
+        saveButton.setFont(Theme.font(13f, Font.BOLD));
+        saveButton.putClientProperty("FlatLaf.style", "background: " + Theme.hex(Theme.ACCENT.darker())
+                + "; foreground: " + Theme.hex(Theme.BG) + "; borderWidth: 0;"
+                + " hoverBackground: " + Theme.hex(Theme.ACCENT) + "; disabledBackground: " + Theme.hex(Theme.RAISED));
+        for (JButton x : new JButton[] {up, down, clip, cancel}) {
+            styleTool(x);
+        }
+        saveButton.setFocusable(false);
         saveButton.addActionListener(e -> saveEditing(false));
         b.add(up);
         b.add(down);
@@ -540,11 +611,13 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         LibrarySource source;
         if (settings.mode() == Settings.Mode.LOCAL && !settings.localFolder().isEmpty()) {
             source = new LocalFolderSource(Paths.get(settings.localFolder()));
-            sourceLabel.setText("Cartella: " + settings.localFolder());
+            sourceLabel.setText("Cartella  " + Paths.get(settings.localFolder()).getFileName());
+            sourceLabel.setToolTipText(settings.localFolder());
         } else {
             source = new DriveFolderSource(new DriveClient(HttpTransport.DEFAULT, Defaults.DRIVE_API_KEY),
                     settings.driveFolderId(), cacheDir());
-            sourceLabel.setText("Google Drive: " + DriveLinks.folderUrl(settings.driveFolderId()));
+            sourceLabel.setText("Google Drive");
+            sourceLabel.setToolTipText(DriveLinks.folderUrl(settings.driveFolderId()));
         }
         controller.setSource(source);
         if (refresh) {
@@ -699,25 +772,35 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         Cue playing = controller.playingCue();
         switch (state) {
             case PLAYING:
+                nowLabel.setText("IN ONDA");
+                nowLabel.setForeground(Theme.ACCENT);
                 nowPlaying.setText("▶  " + playing.title());
-                nowPlaying.setForeground(GREEN);
+                nowPlaying.setForeground(Theme.ACCENT);
                 break;
             case PAUSED:
-                nowPlaying.setText("❚❚  " + playing.title() + "  (in pausa)");
-                nowPlaying.setForeground(Color.DARK_GRAY);
+                nowLabel.setText("IN PAUSA");
+                nowLabel.setForeground(Theme.TEXT_DIM);
+                nowPlaying.setText("❚❚  " + playing.title());
+                nowPlaying.setForeground(Theme.TEXT);
                 break;
             case LOADING:
-                nowPlaying.setText("…  " + playing.title());
-                nowPlaying.setForeground(Color.DARK_GRAY);
+                nowLabel.setText("CARICO…");
+                nowLabel.setForeground(Theme.TEXT_DIM);
+                nowPlaying.setText(playing.title());
+                nowPlaying.setForeground(Theme.TEXT_DIM);
                 break;
             case FADING:
-                nowPlaying.setText("▼  " + playing.title() + "  (sfuma…)");
-                nowPlaying.setForeground(RED);
+                nowLabel.setText("SFUMA…");
+                nowLabel.setForeground(Theme.ERROR);
+                nowPlaying.setText("▼  " + playing.title());
+                nowPlaying.setForeground(Theme.TEXT);
                 break;
             default:
                 Cue next = controller.selectedCue();
-                nowPlaying.setText(next == null ? " " : "Prossimo:  " + next.title());
-                nowPlaying.setForeground(Color.DARK_GRAY);
+                nowLabel.setText("PROSSIMO");
+                nowLabel.setForeground(Theme.TEXT_DIM);
+                nowPlaying.setText(next == null ? " " : next.title());
+                nowPlaying.setForeground(Theme.TEXT);
         }
         pauseButton.setText(state == ShowController.State.PAUSED ? "▶  RIPRENDI" : "❚❚  PAUSA");
         pauseButton.setEnabled(state == ShowController.State.PLAYING || state == ShowController.State.PAUSED);
@@ -755,14 +838,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     @Override
     public void error(String message) {
         SwingUtilities.invokeLater(() -> {
-            status.setForeground(RED);
+            status.setForeground(Theme.ERROR);
             status.setText(message);
             status.setToolTipText(message.length() > 80 ? message : null);
         });
     }
 
     private void setStatus(String message) {
-        status.setForeground(Color.DARK_GRAY);
+        status.setForeground(Theme.TEXT_DIM);
         status.setText(message);
         status.setToolTipText(message.length() > 80 ? message : null);
     }
@@ -773,28 +856,58 @@ final class MainWindow extends JFrame implements ShowController.Listener {
                 : "✂ da " + clock(clip.startMillis());
     }
 
-    /** A row: a coloured tag for the kind, the title, and whether the file is already on disk. */
-    private final class CueRenderer extends DefaultListCellRenderer {
+    /**
+     * A row: a stripe for the kind (amber while it plays), the position in the
+     * show, the title, and on the right the clip and whether it still has to
+     * be downloaded.
+     */
+    private final class CueRenderer extends JPanel implements ListCellRenderer<Cue> {
+        private final JLabel number = new JLabel();
+        private final JLabel title = new JLabel();
+        private final JLabel meta = new JLabel();
+        private Color stripe = Theme.BORDER;
+
+        CueRenderer() {
+            super(new BorderLayout(0, 0));
+            number.setPreferredSize(new Dimension(58, 10));
+            number.setHorizontalAlignment(JLabel.RIGHT);
+            number.setBorder(BorderFactory.createEmptyBorder(0, 0, 0, 16));
+            number.setFont(Theme.font(15f, Font.PLAIN));
+            title.setFont(Theme.font(21f, Font.PLAIN));
+            meta.setFont(Theme.font(15f, Font.PLAIN));
+            meta.setBorder(BorderFactory.createEmptyBorder(0, 12, 0, 16));
+            add(number, BorderLayout.WEST);
+            add(title, BorderLayout.CENTER);
+            add(meta, BorderLayout.EAST);
+            setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, Theme.BG));
+        }
+
         @Override
-        public Component getListCellRendererComponent(JList<?> l, Object value, int index, boolean selected,
+        public Component getListCellRendererComponent(JList<? extends Cue> l, Cue cue, int index, boolean selected,
                                                       boolean focused) {
-            Cue cue = (Cue) value;
-            JLabel label = (JLabel) super.getListCellRendererComponent(l, cue.title(), index, selected, focused);
             boolean playing = index == controller.playingIndex();
             boolean cached = controller.source() != null && controller.source().isLocallyAvailable(cue);
-            String prefix = playing ? "▶  " : editing() ? "≡  " : "    ";
-            String suffix = (cue.clip().isClipped() ? "   " + clipMark(cue.clip()) : "") + (cached ? "" : "   ⤓");
-            label.setText(prefix + cue.title() + suffix);
-            label.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
-            if (!selected) {
-                label.setBackground(playing ? PLAYING_BG : Color.WHITE);
-                label.setForeground(cue.kind() == Cue.Kind.MUSIC ? MUSIC
-                        : cue.kind() == Cue.Kind.EFFECT ? EFFECT : Color.BLACK);
-                if (!cached) {
-                    label.setForeground(Color.GRAY);
-                }
-            }
-            return label;
+            Color kind = cue.kind() == Cue.Kind.MUSIC ? Theme.MUSIC
+                    : cue.kind() == Cue.Kind.EFFECT ? Theme.EFFECT : Theme.TEXT_DIM;
+            stripe = playing ? Theme.ACCENT : selected ? kind : kind.darker().darker();
+            setBackground(playing ? Theme.ACCENT_BG : selected ? Theme.SELECTION : Theme.SURFACE);
+            number.setText(playing ? "▶" : editing() ? "≡  " + (index + 1) : String.valueOf(index + 1));
+            number.setForeground(playing ? Theme.ACCENT : Theme.TEXT_FAINT);
+            title.setText(cue.title());
+            title.setForeground(playing ? Theme.ACCENT : !cached ? Theme.TEXT_DIM : Theme.TEXT);
+            title.setFont(title.getFont().deriveFont(playing || selected ? Font.BOLD : Font.PLAIN));
+            String m = (cue.clip().isClipped() ? clipMark(cue.clip()) : "") + (cached ? "" : "   ⤓");
+            meta.setText(m.trim());
+            meta.setForeground(cue.clip().isClipped() ? Theme.ACCENT.darker() : Theme.TEXT_DIM);
+            meta.setToolTipText(null);
+            return this;
+        }
+
+        @Override
+        protected void paintComponent(java.awt.Graphics g) {
+            super.paintComponent(g);
+            g.setColor(stripe);
+            g.fillRect(0, 0, 4, getHeight());
         }
     }
 }

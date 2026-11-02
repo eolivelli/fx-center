@@ -8,7 +8,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import javax.imageio.ImageIO;
 import javax.swing.SwingUtilities;
-import javax.swing.UIManager;
 
 /**
  * Manual check, not a test: the main window in "Modifica scaletta" mode and
@@ -23,7 +22,7 @@ public final class EditScreenshot {
     }
 
     public static void main(String[] args) throws Exception {
-        UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
+        Theme.install();
         MainWindow[] w = new MainWindow[1];
         SwingUtilities.invokeAndWait(() -> {
             w[0] = new MainWindow(Paths.get(args[0]));
