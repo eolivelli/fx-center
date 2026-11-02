@@ -90,7 +90,12 @@ public final class ShowController implements AudioPlayer.Listener {
             return;
         }
         try {
-            setLibrary(s.list());
+            Library lib = s.list();
+            setLibrary(lib);
+            List<String> warnings = lib.scaletta().warnings();
+            if (!warnings.isEmpty()) {
+                listener.error(Scaletta.FILE_NAME + ": " + String.join("; ", warnings));
+            }
         } catch (IOException e) {
             Library fallback = s instanceof DriveFolderSource ? ((DriveFolderSource) s).lastListing() : null;
             if (fallback != null && !fallback.isEmpty()) {
@@ -198,7 +203,7 @@ public final class ShowController implements AudioPlayer.Listener {
                 if (playing != index) {
                     return; // a STOP or another GO happened meanwhile
                 }
-                player.play(file);
+                player.play(file, cue.clip());
                 state = State.PLAYING;
             }
         } catch (IOException | RuntimeException e) {

@@ -1,6 +1,7 @@
 package dev.olivelli.fxcenter.core;
 
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -35,7 +36,7 @@ public final class LocalFolderSource implements LibrarySource {
         try (Stream<Path> entries = Files.list(folder)) {
             for (Path p : (Iterable<Path>) entries::iterator) {
                 String name = p.getFileName().toString();
-                if (!Files.isRegularFile(p) || name.startsWith(".")) {
+                if (!Files.isRegularFile(p) || name.startsWith(".") || Scaletta.isScalettaFile(name)) {
                     continue;
                 }
                 if (AudioFiles.isAudio(name)) {
@@ -45,7 +46,28 @@ public final class LocalFolderSource implements LibrarySource {
                 }
             }
         }
-        return new Library(cues, docs);
+        Library listing = new Library(cues, docs);
+        Path scaletta = scalettaFile();
+        if (!Files.isRegularFile(scaletta)) {
+            return listing;
+        }
+        byte[] content = Files.readAllBytes(scaletta);
+        return Scaletta.parse(new String(content, StandardCharsets.UTF_8))
+                .arrange(listing, null, Scaletta.md5(content));
+    }
+
+    /** Where this folder keeps its running order, whether or not it exists yet. */
+    public Path scalettaFile() {
+        try (Stream<Path> entries = Files.list(folder)) {
+            for (Path p : (Iterable<Path>) entries::iterator) {
+                if (Scaletta.isScalettaFile(p.getFileName().toString())) {
+                    return p;
+                }
+            }
+        } catch (IOException e) {
+            // fall through to the canonical name
+        }
+        return folder.resolve(Scaletta.FILE_NAME);
     }
 
     @Override

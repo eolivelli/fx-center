@@ -22,6 +22,15 @@ public interface AudioPlayer {
     /** Starts the file from the beginning, stopping anything already playing. */
     void play(Path file) throws IOException;
 
+    /**
+     * Plays only {@code clip} of the file: from its start point, ending with a
+     * {@link Clip#END_FADE_MILLIS} fade at its end point. Position and duration
+     * then count from the clip's start. A player that cannot clip plays it all.
+     */
+    default void play(Path file, Clip clip) throws IOException {
+        play(file);
+    }
+
     void pause();
 
     void resume();

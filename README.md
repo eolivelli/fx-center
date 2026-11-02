@@ -33,6 +33,24 @@ specific to that show except the default folder.
 6. Un'altra cartella: **Google Drive…** e incollare il link (la cartella va
    condivisa con *chiunque abbia il link*), oppure **Cartella locale…** sul
    computer.
+7. **Ordine e tagli (solo sul computer).** **✎ Modifica scaletta**: trascinare
+   i brani per cambiare l'ordine (o Alt+↑/↓); doppio clic su un brano (o
+   **✂ Taglia…**) per scegliere da dove a dove suona: clic sull'onda per
+   ascoltare, `[` e `]` per fissare inizio e fine, frecce per i ritocchi,
+   **Ascolta il finale** per sentire la sfumatura. **Salva** scrive
+   `scaletta.txt` nella cartella (su Drive chiede la prima volta l'accesso a
+   Google). Il file si può anche modificare a mano:
+
+   ```
+   MUS-01 Sigla dei narratori, apertura.mp3
+   Main Titles (Charlie and the Chocolate Factory) - Danny Elfman.mp3 | 0:12.5 - 1:40
+   La Fabbrica di Cioccolato - Willy Wonka.mp3 | 0:20 -
+   ```
+
+   Un brano per riga, nell'ordine dello spettacolo; dopo `|` il taglio
+   facoltativo `inizio - fine` (uno dei due può mancare). I brani non elencati
+   vanno in fondo. Un brano tagliato finisce con una sfumatura di mezzo
+   secondo e nell'elenco mostra `✂ 1:27`.
 
 ## How it works
 
@@ -52,6 +70,15 @@ android/   Android app + MediaPlayer, compiles core/ from source (Gradle, AGP)
   the checksum Drive reports matches the one recorded after a verified
   download, so a replaced track is fetched again and a torn download is never
   played. The last listing is kept too, so the app starts offline.
+- **Running order and clips** come from `scaletta.txt` in the folder
+  (`core/.../Scaletta.java`), parsed on both platforms. Only the desktop
+  writes it: to a local folder directly, to Drive as the user signed in with
+  Google (OAuth desktop client, loopback + PKCE, refresh token in
+  `~/.fx-center/google-login.properties`). A save first checks the file's MD5
+  against what was read, so a hand edit made meanwhile is not overwritten
+  silently. MP3 clips start without decoding up to the start point:
+  `Mp3Seek` walks frame headers and replays the Layer III bit reservoir to
+  land on the same sample a decode from the start would reach.
 - **Show rules** live in `ShowController` and are unit-tested: GO plays the
   selected cue, finishing advances the selection without playing, STOP keeps
   the selection.
@@ -70,9 +97,9 @@ the debug APK to the GitHub release. Bump `versionCode`/`versionName` in
 Manual checks on a developer machine (they need a sound card / a display):
 
 ```sh
-java -cp desktop/target/test-classes:desktop/target/fx-center-0.2.0-SNAPSHOT.jar \
+java -cp desktop/target/test-classes:desktop/target/fx-center-0.3.0-SNAPSHOT.jar \
     dev.olivelli.fxcenter.desktop.PlayCheck some.mp3
-java -Dfxcenter.home=/tmp/fxh -jar desktop/target/fx-center-0.2.0-SNAPSHOT.jar
+java -Dfxcenter.home=/tmp/fxh -jar desktop/target/fx-center-0.3.0-SNAPSHOT.jar
 ```
 
 ## Licence

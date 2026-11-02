@@ -1,11 +1,13 @@
 package dev.olivelli.fxcenter.desktop;
 
 import dev.olivelli.fxcenter.core.AudioPlayer;
+import dev.olivelli.fxcenter.core.Clip;
 import java.io.BufferedInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Locale;
 import java.util.Map;
 import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
@@ -34,9 +36,14 @@ public final class JavaSoundPlayer implements AudioPlayer {
     }
 
     @Override
-    public synchronized void play(Path file) throws IOException {
+    public void play(Path file) throws IOException {
+        play(file, Clip.NONE);
+    }
+
+    @Override
+    public synchronized void play(Path file, Clip clip) throws IOException {
         stop();
-        Playback p = new Playback(file);
+        Playback p = new Playback(file, clip);
         current = p;
         p.thread.start();
     }
@@ -107,7 +114,73 @@ public final class JavaSoundPlayer implements AudioPlayer {
 
     /** Opens the file as 16-bit signed PCM, whatever it is stored as. */
     static AudioInputStream openPcm(Path file) throws IOException {
-        InputStream raw = new BufferedInputStream(Files.newInputStream(file), 1 << 16);
+        return toPcm(new BufferedInputStream(Files.newInputStream(file), 1 << 16), file);
+    }
+
+    /**
+     * Opens the file as PCM positioned at {@code startMillis}, on the very
+     * sample a decode from the start would reach. An MP3 is entered a few frames
+     * early at the point {@link Mp3Seek} finds and the samples up to the target
+     * are decoded and dropped; anything else is decoded from the start and
+     * dropped, which is fast for uncompressed formats.
+     */
+    static AudioInputStream openPcmAt(Path file, long startMillis) throws IOException {
+        if (startMillis <= 0) {
+            return openPcm(file);
+        }
+        AudioInputStream in = null;
+        long frames = -1;
+        if (file.getFileName().toString().toLowerCase(Locale.ROOT).endsWith(".mp3")) {
+            Mp3Seek.Point p = Mp3Seek.before(file, startMillis);
+            if (p != null) {
+                InputStream raw = new BufferedInputStream(Files.newInputStream(file), 1 << 16);
+                skipFully(raw, p.byteOffset);
+                in = toPcm(raw, file);
+                frames = p.discardFrames;
+            }
+        }
+        if (in == null) {
+            in = openPcm(file);
+            frames = Math.round(startMillis / 1000.0 * in.getFormat().getFrameRate());
+        }
+        AudioFormat f = in.getFormat();
+        try {
+            discard(in, frames * f.getFrameSize());
+        } catch (IOException e) {
+            in.close();
+            throw e;
+        }
+        return in;
+    }
+
+    private static void skipFully(InputStream in, long n) throws IOException {
+        long done = 0;
+        while (done < n) {
+            long s = in.skip(n - done);
+            if (s <= 0) {
+                if (in.read() < 0) {
+                    return;
+                }
+                s = 1;
+            }
+            done += s;
+        }
+    }
+
+    /** Reads and drops bytes: skip() on a converted stream is not reliable across providers. */
+    private static void discard(InputStream in, long bytes) throws IOException {
+        byte[] buf = new byte[1 << 16];
+        long left = bytes;
+        while (left > 0) {
+            int n = in.read(buf, 0, (int) Math.min(buf.length, left));
+            if (n < 0) {
+                return;
+            }
+            left -= n;
+        }
+    }
+
+    private static AudioInputStream toPcm(InputStream raw, Path file) throws IOException {
         try {
             AudioInputStream in = AudioSystem.getAudioInputStream(raw);
             AudioFormat src = in.getFormat();
@@ -130,17 +203,31 @@ public final class JavaSoundPlayer implements AudioPlayer {
     /** One file on one line on one thread. */
     private final class Playback implements Runnable {
         final Path file;
+        final Clip clip;
         final AudioInputStream in;
         final SourceDataLine line;
         final long durationMillis;
+        /** Bytes of PCM the clip lasts, or -1 to play to the end of the file. */
+        final long clipBytes;
+        final long fadeInBytes;
+        final long fadeOutBytes;
         final Thread thread;
         private volatile boolean cancelled;
         private boolean paused;
 
-        Playback(Path file) throws IOException {
+        Playback(Path file, Clip clip) throws IOException {
             this.file = file;
-            this.in = openPcm(file);
+            this.clip = clip;
+            this.in = openPcmAt(file, clip.startMillis());
             AudioFormat format = in.getFormat();
+            long bytesPerSecond = (long) format.getFrameRate() * format.getFrameSize();
+            int frame = format.getFrameSize();
+            clipBytes = clip.hasEnd()
+                    ? (clip.endMillis() - clip.startMillis()) * bytesPerSecond / 1000 / frame * frame : -1;
+            // Entering a song mid-phrase clicks; a 20 ms ramp is too short to hear as a fade.
+            fadeInBytes = clip.startMillis() > 0 ? bytesPerSecond / 50 / frame * frame : 0;
+            fadeOutBytes = clip.hasEnd()
+                    ? Math.min(clipBytes, Clip.END_FADE_MILLIS * bytesPerSecond / 1000 / frame * frame) : 0;
             try {
                 line = (SourceDataLine) AudioSystem.getLine(new DataLine.Info(SourceDataLine.class, format));
                 line.open(format);
@@ -150,10 +237,38 @@ public final class JavaSoundPlayer implements AudioPlayer {
             }
             applyVolume();
             long fromHeader = JavaSoundPlayer.durationMillis(file);
-            durationMillis = fromHeader > 0 ? fromHeader
+            long fileMillis = fromHeader > 0 ? fromHeader
                     : in.getFrameLength() > 0 ? (long) (in.getFrameLength() * 1000.0 / format.getFrameRate()) : -1;
+            durationMillis = clip.lengthMillis(fileMillis);
             thread = new Thread(this, "fx-center-playback");
             thread.setDaemon(true);
+        }
+
+        /** Scales 16-bit little-endian samples for the fade-in and the end-of-clip fade-out. */
+        void envelope(byte[] buf, int n, long at) {
+            boolean inFadeIn = at < fadeInBytes;
+            boolean inFadeOut = fadeOutBytes > 0 && at + n > clipBytes - fadeOutBytes;
+            if (!inFadeIn && !inFadeOut) {
+                return;
+            }
+            int frame = in.getFormat().getFrameSize();
+            for (int i = 0; i + frame <= n; i += frame) {
+                long pos = at + i;
+                double g = 1.0;
+                if (pos < fadeInBytes) {
+                    g = (double) pos / fadeInBytes;
+                }
+                long fromEnd = clipBytes - pos;
+                if (fadeOutBytes > 0 && fromEnd < fadeOutBytes) {
+                    g = Math.min(g, (double) fromEnd / fadeOutBytes);
+                }
+                for (int b = i; b + 1 < i + frame; b += 2) {
+                    int sample = (short) ((buf[b] & 0xff) | (buf[b + 1] << 8));
+                    int scaled = (int) Math.round(sample * g);
+                    buf[b] = (byte) scaled;
+                    buf[b + 1] = (byte) (scaled >> 8);
+                }
+            }
         }
 
         void applyVolume() {
@@ -191,9 +306,16 @@ public final class JavaSoundPlayer implements AudioPlayer {
             String failure = null;
             try {
                 line.start();
-                byte[] buf = new byte[line.getBufferSize() / 4];
+                int frame = in.getFormat().getFrameSize();
+                byte[] buf = new byte[line.getBufferSize() / 4 / frame * frame];
+                long played = 0;
                 int n;
-                while (!cancelled && (n = in.read(buf)) >= 0) {
+                while (!cancelled && (clipBytes < 0 || played < clipBytes)
+                        && (n = in.read(buf, 0, clipBytes < 0 ? buf.length
+                        : (int) Math.min(buf.length, clipBytes - played))) >= 0) {
+                    n = n / frame * frame;
+                    envelope(buf, n, played);
+                    played += n;
                     synchronized (this) {
                         while (paused && !cancelled) {
                             wait();

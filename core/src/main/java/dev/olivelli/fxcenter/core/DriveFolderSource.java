@@ -39,6 +39,13 @@ public final class DriveFolderSource implements LibrarySource {
     @Override
     public Library list() throws IOException {
         Library library = client.listFolder(folderId);
+        Library.ScalettaInfo info = library.scaletta();
+        if (info.present()) {
+            String text = client.downloadText(info.fileId());
+            // Drive's own checksum when it gives one: it is what the save compares against.
+            library = Scaletta.parse(text).arrange(library, info.fileId(),
+                    info.md5() != null ? info.md5() : Scaletta.md5(text));
+        }
         LibraryFile.save(library, folderDir().resolve("library.json"));
         return library;
     }

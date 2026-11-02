@@ -1,5 +1,6 @@
 package dev.olivelli.fxcenter.desktop;
 
+import dev.olivelli.fxcenter.core.Clip;
 import dev.olivelli.fxcenter.core.Cue;
 import dev.olivelli.fxcenter.core.Defaults;
 import dev.olivelli.fxcenter.core.Document;
@@ -10,6 +11,7 @@ import dev.olivelli.fxcenter.core.HttpTransport;
 import dev.olivelli.fxcenter.core.Library;
 import dev.olivelli.fxcenter.core.LibrarySource;
 import dev.olivelli.fxcenter.core.LocalFolderSource;
+import dev.olivelli.fxcenter.core.Scaletta;
 import dev.olivelli.fxcenter.core.Settings;
 import dev.olivelli.fxcenter.core.ShowController;
 import java.awt.BorderLayout;
@@ -20,6 +22,8 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.Font;
 import java.awt.GridLayout;
+import java.awt.Cursor;
+import java.awt.event.InputEvent;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
@@ -30,6 +34,8 @@ import java.io.IOException;
 import java.net.URI;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import javax.swing.AbstractAction;
@@ -90,18 +96,41 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     private final JButton stopButton = bigButton("■  STOP", RED);
     private final JButton pauseButton = bigButton("❚❚  PAUSA", new Color(0x555555));
     private final JButton docsButton = new JButton("Documenti ▾");
+    private final JButton editButton = new JButton("✎ Modifica scaletta");
+    private final List<JButton> sourceButtons = new ArrayList<>();
+    private final JPanel editBar = new JPanel(new BorderLayout(8, 0));
+    private final JButton saveButton = new JButton("Salva");
     private boolean syncingSelection;
+
+    private final GoogleLogin login;
+    private final ScalettaStore store;
+    /** The library as it was when editing began; null when not editing. */
+    private Library beforeEdit;
+    private boolean dirty;
+    private int dragFrom = -1;
 
     MainWindow(Path homeDir) {
         super("FX Center");
         this.homeDir = homeDir;
         this.settings = Settings.load(settingsFile());
+        this.login = new GoogleLogin(homeDir);
+        this.store = new ScalettaStore(login);
         this.controller = new ShowController(new JavaSoundPlayer(), this);
         controller.setVolume(settings.volume());
         buildUi();
         applySettings(true);
-        setDefaultCloseOperation(DISPOSE_ON_CLOSE);
+        setDefaultCloseOperation(DO_NOTHING_ON_CLOSE);
         addWindowListener(new WindowAdapter() {
+            @Override
+            public void windowClosing(WindowEvent e) {
+                if (editing() && dirty && JOptionPane.showConfirmDialog(MainWindow.this,
+                        "La scaletta ha modifiche non salvate. Uscire lo stesso?", "FX Center",
+                        JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+                    return;
+                }
+                dispose();
+            }
+
             @Override
             public void windowClosed(WindowEvent e) {
                 controller.close();
@@ -112,6 +141,11 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         setSize(900, 700);
         setMinimumSize(new Dimension(600, 450));
         setLocationRelativeTo(null);
+    }
+
+    /** For the manual screenshot checks. */
+    ShowController controllerForTests() {
+        return controller;
     }
 
     private Path settingsFile() {
@@ -141,12 +175,28 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         JButton refresh = new JButton("Aggiorna");
         refresh.addActionListener(e -> refreshAndDownload());
         docsButton.addActionListener(e -> showDocuments());
+        editButton.setToolTipText("Cambia l'ordine dei brani e scegli quale parte di ciascuno suonare");
+        editButton.addActionListener(e -> startEditing());
+        actions.add(editButton);
         actions.add(docsButton);
         actions.add(local);
         actions.add(drive);
         actions.add(refresh);
+        sourceButtons.add(local);
+        sourceButtons.add(drive);
+        sourceButtons.add(refresh);
+        sourceButtons.add(editButton);
         top.add(actions, BorderLayout.EAST);
-        root.add(top, BorderLayout.NORTH);
+
+        JPanel north = new JPanel();
+        north.setLayout(new BoxLayout(north, BoxLayout.Y_AXIS));
+        top.setAlignmentX(Component.LEFT_ALIGNMENT);
+        north.add(top);
+        buildEditBar();
+        editBar.setAlignmentX(Component.LEFT_ALIGNMENT);
+        north.add(Box.createVerticalStrut(6));
+        north.add(editBar);
+        root.add(north, BorderLayout.NORTH);
 
         // Centre: the list, big.
         list.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -158,14 +208,45 @@ final class MainWindow extends JFrame implements ShowController.Listener {
                 controller.select(list.getSelectedIndex());
             }
         });
-        list.addMouseListener(new MouseAdapter() {
+        MouseAdapter mouse = new MouseAdapter() {
             @Override
             public void mouseClicked(MouseEvent e) {
                 if (e.getClickCount() == 2) {
-                    go();
+                    if (editing()) {
+                        editClip();
+                    } else {
+                        go();
+                    }
                 }
             }
-        });
+
+            @Override
+            public void mousePressed(MouseEvent e) {
+                dragFrom = editing() ? list.locationToIndex(e.getPoint()) : -1;
+            }
+
+            @Override
+            public void mouseDragged(MouseEvent e) {
+                if (dragFrom < 0) {
+                    return;
+                }
+                int to = list.locationToIndex(e.getPoint());
+                if (to >= 0 && to != dragFrom) {
+                    list.setCursor(Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                    moveCue(dragFrom, to);
+                    dragFrom = to;
+                    list.ensureIndexIsVisible(to);
+                }
+            }
+
+            @Override
+            public void mouseReleased(MouseEvent e) {
+                dragFrom = -1;
+                list.setCursor(Cursor.getDefaultCursor());
+            }
+        };
+        list.addMouseListener(mouse);
+        list.addMouseMotionListener(mouse);
         root.add(new JScrollPane(list), BorderLayout.CENTER);
 
         // Bottom: transport.
@@ -226,6 +307,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_P, 0), "pause", () -> run(controller::pauseOrResume));
         list.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "go");
         list.getActionMap().put("go", action(this::go));
+        bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK), "moveUp", () -> moveSelected(-1));
+        bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), "moveDown", () -> moveSelected(1));
+        list.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "clip");
+        list.getActionMap().put("clip", action(() -> {
+            if (editing()) {
+                editClip();
+            }
+        }));
 
         new Timer(200, e -> updateProgress()).start();
     }
@@ -256,6 +345,194 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         };
     }
 
+    // --- editing the scaletta -------------------------------------------
+
+    private void buildEditBar() {
+        editBar.setBackground(new Color(0xfff8e1));
+        editBar.setBorder(BorderFactory.createCompoundBorder(
+                BorderFactory.createLineBorder(new Color(0xffb300)),
+                BorderFactory.createEmptyBorder(6, 10, 6, 10)));
+        JLabel hint = new JLabel("<html><b>Modifica scaletta.</b> Trascina un brano per spostarlo (o Alt+↑/↓). "
+                + "Doppio clic o ✂ per scegliere la parte da suonare.</html>");
+        hint.setFont(hint.getFont().deriveFont(Font.PLAIN, 13f));
+        editBar.add(hint, BorderLayout.CENTER);
+        JPanel b = new JPanel(new FlowLayout(FlowLayout.RIGHT, 6, 0));
+        b.setOpaque(false);
+        JButton up = new JButton("▲");
+        up.setToolTipText("Sposta su (Alt+↑)");
+        up.addActionListener(e -> moveSelected(-1));
+        JButton down = new JButton("▼");
+        down.setToolTipText("Sposta giù (Alt+↓)");
+        down.addActionListener(e -> moveSelected(1));
+        JButton clip = new JButton("✂ Taglia…");
+        clip.setToolTipText("Scegli da dove a dove suona il brano selezionato (Invio)");
+        clip.addActionListener(e -> editClip());
+        JButton cancel = new JButton("Annulla");
+        cancel.addActionListener(e -> cancelEditing());
+        saveButton.setFont(saveButton.getFont().deriveFont(Font.BOLD));
+        saveButton.addActionListener(e -> saveEditing(false));
+        b.add(up);
+        b.add(down);
+        b.add(clip);
+        b.add(Box.createHorizontalStrut(16));
+        b.add(cancel);
+        b.add(saveButton);
+        editBar.add(b, BorderLayout.EAST);
+        editBar.setVisible(false);
+    }
+
+    private boolean editing() {
+        return beforeEdit != null;
+    }
+
+    void startEditing() {
+        if (editing()) {
+            return;
+        }
+        beforeEdit = controller.library();
+        dirty = false;
+        updateEditUi();
+    }
+
+    private void updateEditUi() {
+        boolean on = editing();
+        editBar.setVisible(on);
+        for (JButton b : sourceButtons) {
+            b.setEnabled(!on);
+        }
+        saveButton.setEnabled(on && dirty);
+        // Always say where it writes: Drive and a local folder behave differently.
+        boolean drive = controller.source() instanceof DriveFolderSource;
+        boolean login = drive && store.needsLogin(controller.source());
+        saveButton.setText(drive ? (login ? "Salva su Drive…" : "Salva su Drive") : "Salva nella cartella");
+        saveButton.setToolTipText(!dirty ? "Nessuna modifica da salvare: sposta o taglia un brano"
+                : login ? "La prima volta si apre il browser per accedere a Google"
+                : "Scrive " + Scaletta.FILE_NAME + (drive ? " nella cartella di Google Drive" : " nella cartella"));
+        revalidate();
+        list.repaint();
+    }
+
+    private void cancelEditing() {
+        if (dirty && JOptionPane.showConfirmDialog(this, "Buttare via le modifiche alla scaletta?", "Annulla",
+                JOptionPane.YES_NO_OPTION) != JOptionPane.YES_OPTION) {
+            return;
+        }
+        Library original = beforeEdit;
+        beforeEdit = null;
+        controller.setLibrary(original);
+        updateEditUi();
+    }
+
+    /** The running order while editing: pushed into the controller, so GO already plays the new version. */
+    private void applyDraft(List<Cue> cues) {
+        controller.setLibrary(controller.library().withCues(cues));
+        dirty = true;
+        updateEditUi();
+    }
+
+    private void moveCue(int from, int to) {
+        if (!editing()) {
+            return;
+        }
+        List<Cue> cues = new ArrayList<>(controller.library().cues());
+        if (from < 0 || from >= cues.size() || to < 0 || to >= cues.size()) {
+            return;
+        }
+        cues.add(to, cues.remove(from));
+        applyDraft(cues);
+        controller.select(to);
+    }
+
+    private void moveSelected(int delta) {
+        int i = controller.selectedIndex();
+        if (editing() && i >= 0) {
+            moveCue(i, i + delta);
+        }
+    }
+
+    private void editClip() {
+        Cue cue = controller.selectedCue();
+        if (!editing() || cue == null) {
+            return;
+        }
+        LibrarySource source = controller.source();
+        int index = controller.selectedIndex();
+        setStatus("Preparo " + cue.title() + "…");
+        run(() -> {
+            if (controller.state() != ShowController.State.IDLE) {
+                controller.stop();
+            }
+            Path file;
+            try {
+                file = source.localFile(cue, dev.olivelli.fxcenter.core.Progress.NONE);
+            } catch (IOException e) {
+                error("Non riesco a preparare " + cue.title() + ": " + e.getMessage());
+                return;
+            }
+            SwingUtilities.invokeLater(() -> {
+                setStatus(" ");
+                Clip clip = ClipEditor.edit(this, cue, file);
+                if (clip == null || clip.equals(cue.clip()) || !editing()) {
+                    return;
+                }
+                List<Cue> cues = new ArrayList<>(controller.library().cues());
+                if (index < cues.size() && cues.get(index).id().equals(cue.id())) {
+                    cues.set(index, cues.get(index).withClip(clip));
+                    applyDraft(cues);
+                }
+            });
+        });
+    }
+
+    private void saveEditing(boolean force) {
+        if (!editing() || !dirty) {
+            return;
+        }
+        Library draft = controller.library();
+        LibrarySource source = controller.source();
+        Library.ScalettaInfo read = beforeEdit.scaletta();
+        String text = Scaletta.format(draft.cues(), read.orphanLines());
+        saveButton.setEnabled(false);
+        setStatus(store.needsLogin(source)
+                ? "Si apre il browser: accedi a Google per salvare la scaletta…" : "Salvo la scaletta…");
+        run(() -> {
+            try {
+                store.save(source, read, text, force);
+            } catch (ScalettaStore.Conflict e) {
+                SwingUtilities.invokeLater(this::askOnConflict);
+                return;
+            } catch (IOException e) {
+                error("Scaletta non salvata: " + e.getMessage());
+                SwingUtilities.invokeLater(this::updateEditUi);
+                return;
+            }
+            SwingUtilities.invokeLater(() -> {
+                beforeEdit = null;
+                updateEditUi();
+                setStatus("Scaletta salvata");
+            });
+            controller.refresh();
+        });
+    }
+
+    private void askOnConflict() {
+        Object[] options = {"Sovrascrivi", "Ricarica (perdo le mie modifiche)", "Annulla"};
+        int choice = JOptionPane.showOptionDialog(this,
+                Scaletta.FILE_NAME + " è stato cambiato da qualcun altro mentre lo modificavi.\n"
+                        + "Sovrascrivere le sue modifiche con le tue, o ricaricare la sua versione?",
+                "Scaletta cambiata", JOptionPane.DEFAULT_OPTION, JOptionPane.WARNING_MESSAGE, null, options,
+                options[2]);
+        if (choice == 0) {
+            saveEditing(true);
+        } else if (choice == 1) {
+            beforeEdit = null;
+            updateEditUi();
+            refreshAndDownload();
+        } else {
+            updateEditUi();
+        }
+    }
+
     // --- source handling ---------------------------------------------------
 
     /** Builds the source from the settings and, unless silent, lists and downloads it. */
@@ -281,7 +558,17 @@ final class MainWindow extends JFrame implements ShowController.Listener {
             controller.refresh();
             controller.downloadAll((what, done, total) -> SwingUtilities.invokeLater(() ->
                     setStatus("Scarico " + what + (total > 0 ? "  " + (done * 100 / total) + "%" : ""))));
-            SwingUtilities.invokeLater(() -> setStatus(controller.library().cues().size() + " brani pronti"));
+            SwingUtilities.invokeLater(() -> {
+                Library lib = controller.library();
+                List<String> warnings = lib.scaletta().warnings();
+                if (warnings.isEmpty()) {
+                    setStatus(lib.cues().size() + " brani pronti");
+                } else {
+                    // Keep the scaletta's problems on screen: they are why a cue is not where expected.
+                    error(lib.cues().size() + " brani pronti. " + Scaletta.FILE_NAME + ": "
+                            + String.join("; ", warnings));
+                }
+            });
         });
     }
 
@@ -470,12 +757,20 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         SwingUtilities.invokeLater(() -> {
             status.setForeground(RED);
             status.setText(message);
+            status.setToolTipText(message.length() > 80 ? message : null);
         });
     }
 
     private void setStatus(String message) {
         status.setForeground(Color.DARK_GRAY);
         status.setText(message);
+        status.setToolTipText(message.length() > 80 ? message : null);
+    }
+
+    /** "✂ 1:27" (how long it plays) or "✂ da 0:30" when it plays to the end of the file. */
+    static String clipMark(Clip clip) {
+        return clip.hasEnd() ? "✂ " + clock(clip.endMillis() - clip.startMillis())
+                : "✂ da " + clock(clip.startMillis());
     }
 
     /** A row: a coloured tag for the kind, the title, and whether the file is already on disk. */
@@ -487,8 +782,8 @@ final class MainWindow extends JFrame implements ShowController.Listener {
             JLabel label = (JLabel) super.getListCellRendererComponent(l, cue.title(), index, selected, focused);
             boolean playing = index == controller.playingIndex();
             boolean cached = controller.source() != null && controller.source().isLocallyAvailable(cue);
-            String prefix = playing ? "▶  " : "    ";
-            String suffix = cached ? "" : "   ⤓";
+            String prefix = playing ? "▶  " : editing() ? "≡  " : "    ";
+            String suffix = (cue.clip().isClipped() ? "   " + clipMark(cue.clip()) : "") + (cached ? "" : "   ⤓");
             label.setText(prefix + cue.title() + suffix);
             label.setBorder(BorderFactory.createEmptyBorder(0, 10, 0, 10));
             if (!selected) {

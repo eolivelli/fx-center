@@ -44,6 +44,7 @@ public final class DriveClient {
     public Library listFolder(String folderId) throws IOException {
         List<Cue> cues = new ArrayList<>();
         List<Document> docs = new ArrayList<>();
+        String[] scaletta = new String[2];
         String pageToken = null;
         do {
             String url = API + "?q=" + encode("'" + folderId + "' in parents and trashed = false")
@@ -56,14 +57,38 @@ public final class DriveClient {
                  Reader reader = new InputStreamReader(r.body, StandardCharsets.UTF_8)) {
                 page = JsonParser.parseReader(reader).getAsJsonObject();
             }
-            parseFiles(page, cues, docs);
+            parseFiles(page, cues, docs, scaletta);
             pageToken = page.has("nextPageToken") ? page.get("nextPageToken").getAsString() : null;
         } while (pageToken != null);
-        return new Library(cues, docs);
+        Library sorted = new Library(cues, docs);
+        if (scaletta[0] == null) {
+            return sorted;
+        }
+        return Library.ordered(sorted.cues(), sorted.documents(), new Library.ScalettaInfo(true, scaletta[0],
+                scaletta[1], java.util.Collections.emptyList(), java.util.Collections.emptyList()));
+    }
+
+    /** A small text file's content, as UTF-8. */
+    public String downloadText(String fileId) throws IOException {
+        String url = API + "/" + encode(fileId) + "?alt=media&supportsAllDrives=true&key=" + encode(apiKey);
+        try (HttpTransport.Response r = http.get(url)) {
+            java.io.ByteArrayOutputStream buf = new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            while ((n = r.body.read(chunk)) > 0) {
+                buf.write(chunk, 0, n);
+            }
+            return new String(buf.toByteArray(), StandardCharsets.UTF_8);
+        }
     }
 
     /** Parses one {@code files.list} page. Package-private for the test fixture. */
     static void parseFiles(JsonObject page, List<Cue> cues, List<Document> docs) {
+        parseFiles(page, cues, docs, new String[2]);
+    }
+
+    /** @param scaletta receives the id and MD5 of scaletta.txt, when the page has it */
+    static void parseFiles(JsonObject page, List<Cue> cues, List<Document> docs, String[] scaletta) {
         JsonArray files = page.getAsJsonArray("files");
         if (files == null) {
             return;
@@ -75,6 +100,11 @@ public final class DriveClient {
             String mime = str(f, "mimeType");
             if (mime.equals("application/vnd.google-apps.folder")) {
                 continue; // subfolders are not scanned, by design: one flat folder per show
+            }
+            if (Scaletta.isScalettaFile(name) && !mime.startsWith("application/vnd.google-apps.")) {
+                scaletta[0] = id;
+                scaletta[1] = f.has("md5Checksum") ? f.get("md5Checksum").getAsString() : null;
+                continue; // settings for the app, not a document for people
             }
             if (AudioFiles.isAudio(name) && !mime.startsWith("application/vnd.google-apps.")) {
                 long size = f.has("size") ? Long.parseLong(f.get("size").getAsString()) : -1;

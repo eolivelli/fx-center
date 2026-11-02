@@ -18,6 +18,7 @@ public final class Cue {
     private final String fileName;
     private final long size;
     private final String md5;
+    private final Clip clip;
 
     /**
      * @param id       stable identifier
@@ -26,10 +27,25 @@ public final class Cue {
      * @param md5      hex MD5 as reported by Drive, or null when unknown
      */
     public Cue(String id, String fileName, long size, String md5) {
+        this(id, fileName, size, md5, Clip.NONE);
+    }
+
+    public Cue(String id, String fileName, long size, String md5, Clip clip) {
         this.id = Objects.requireNonNull(id, "id");
         this.fileName = Objects.requireNonNull(fileName, "fileName");
         this.size = size;
         this.md5 = md5;
+        this.clip = clip == null ? Clip.NONE : clip;
+    }
+
+    /** The same file playing another part of itself. */
+    public Cue withClip(Clip clip) {
+        return new Cue(id, fileName, size, md5, clip);
+    }
+
+    /** The part of the file this cue plays; {@link Clip#NONE} for all of it. */
+    public Clip clip() {
+        return clip;
     }
 
     public String id() {
@@ -74,12 +90,12 @@ public final class Cue {
         }
         Cue other = (Cue) o;
         return id.equals(other.id) && fileName.equals(other.fileName)
-                && size == other.size && Objects.equals(md5, other.md5);
+                && size == other.size && Objects.equals(md5, other.md5) && clip.equals(other.clip);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(id, fileName, size, md5);
+        return Objects.hash(id, fileName, size, md5, clip);
     }
 
     @Override
