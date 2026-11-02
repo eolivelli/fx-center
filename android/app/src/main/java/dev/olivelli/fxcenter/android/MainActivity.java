@@ -50,6 +50,7 @@ public final class MainActivity extends Activity implements ShowController.Liste
 
     private ListView list;
     private TextView source;
+    private TextView nowLabel;
     private TextView nowPlaying;
     private TextView time;
     private TextView status;
@@ -87,6 +88,7 @@ public final class MainActivity extends Activity implements ShowController.Liste
 
         list = findViewById(R.id.cues);
         source = findViewById(R.id.source);
+        nowLabel = findViewById(R.id.now_label);
         nowPlaying = findViewById(R.id.now_playing);
         time = findViewById(R.id.time);
         status = findViewById(R.id.status);
@@ -151,7 +153,7 @@ public final class MainActivity extends Activity implements ShowController.Liste
     private void applySettings() {
         controller.setSource(new DriveFolderSource(new DriveClient(HttpTransport.DEFAULT, Defaults.DRIVE_API_KEY),
                 settings.driveFolderId(), homeDir().resolve("cache")));
-        source.setText("Google Drive: " + DriveLinks.folderUrl(settings.driveFolderId()));
+        source.setText("Google Drive");
         refreshAndDownload();
     }
 
@@ -262,31 +264,33 @@ public final class MainActivity extends Activity implements ShowController.Liste
         Cue playing = controller.playingCue();
         switch (state) {
             case PLAYING:
-                nowPlaying.setText("▶  " + playing.title());
-                nowPlaying.setTextColor(getColor(R.color.go));
+                now(R.string.on_air, R.color.accent, "▶  " + playing.title(), R.color.accent);
                 break;
             case PAUSED:
-                nowPlaying.setText("❚❚  " + playing.title() + "  (in pausa)");
-                nowPlaying.setTextColor(getColor(R.color.pause));
+                now(R.string.paused, R.color.text_dim, "❚❚  " + playing.title(), R.color.text);
                 break;
             case LOADING:
-                nowPlaying.setText("…  " + playing.title());
-                nowPlaying.setTextColor(getColor(R.color.pause));
+                now(R.string.loading, R.color.text_dim, playing.title(), R.color.text_dim);
                 break;
             case FADING:
-                nowPlaying.setText("▼  " + playing.title() + "  (sfuma…)");
-                nowPlaying.setTextColor(getColor(R.color.stop));
+                now(R.string.fading, R.color.error, "▼  " + playing.title(), R.color.text);
                 break;
             default:
                 Cue next = controller.selectedCue();
-                nowPlaying.setText(next == null ? " " : "Prossimo:  " + next.title());
-                nowPlaying.setTextColor(getColor(R.color.pause));
+                now(R.string.next, R.color.text_dim, next == null ? " " : next.title(), R.color.text);
         }
         pause.setText(state == ShowController.State.PAUSED ? R.string.resume : R.string.pause);
         pause.setEnabled(state == ShowController.State.PLAYING || state == ShowController.State.PAUSED);
         stop.setEnabled(state != ShowController.State.IDLE);
         go.setEnabled(controller.selectedCue() != null);
         updateProgress();
+    }
+
+    private void now(int label, int labelColor, String title, int titleColor) {
+        nowLabel.setText(label);
+        nowLabel.setTextColor(getColor(labelColor));
+        nowPlaying.setText(title);
+        nowPlaying.setTextColor(getColor(titleColor));
     }
 
     private boolean sameCues(Library lib) {
@@ -324,7 +328,7 @@ public final class MainActivity extends Activity implements ShowController.Liste
     }
 
     private void setStatus(String message) {
-        status.setTextColor(getColor(R.color.pause));
+        status.setTextColor(getColor(R.color.text_dim));
         status.setText(message);
     }
 }

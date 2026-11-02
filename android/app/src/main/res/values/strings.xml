@@ -5,13 +5,18 @@
     <string name="stop">■  STOP</string>
     <string name="pause">❚❚  PAUSA</string>
     <string name="resume">▶  RIPRENDI</string>
-    <string name="refresh">Aggiorna</string>
+    <string name="refresh">⟳ Aggiorna</string>
     <string name="documents">Documenti</string>
     <string name="drive">Drive…</string>
     <string name="drive_prompt">Incolla il link della cartella di Google Drive (condivisa con \"chiunque abbia il link\")</string>
     <string name="drive_bad_link">Non sembra un link di una cartella di Google Drive</string>
     <string name="no_documents">Nessun documento nella cartella</string>
-    <string name="volume">Volume</string>
+    <string name="volume">VOLUME</string>
+    <string name="next">PROSSIMO</string>
+    <string name="on_air">IN ONDA</string>
+    <string name="paused">IN PAUSA</string>
+    <string name="loading">CARICO…</string>
+    <string name="fading">SFUMA…</string>
     <string name="ok">OK</string>
     <string name="cancel">Annulla</string>
 </resources>

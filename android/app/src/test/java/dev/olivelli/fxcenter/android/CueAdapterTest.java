@@ -8,11 +8,12 @@ import org.junit.Test;
 public class CueAdapterTest {
 
     @Test
-    public void rowTextMarksPlayingAndMissing() {
+    public void rowMarksPlayingAndMissing() {
         Cue cue = new Cue("id", "MUS-01 Sigla.mp3", 1, null);
-        assertEquals("MUS-01 Sigla", CueAdapter.rowText(cue, false, true));
-        assertEquals("▶  MUS-01 Sigla", CueAdapter.rowText(cue, true, true));
-        assertEquals("MUS-01 Sigla   ⤓", CueAdapter.rowText(cue, false, false));
+        assertEquals("MUS-01 Sigla", CueAdapter.titleText(cue, true));
+        assertEquals("MUS-01 Sigla   ⤓", CueAdapter.titleText(cue, false));
+        assertEquals("3", CueAdapter.numberText(2, false));
+        assertEquals("▶", CueAdapter.numberText(2, true));
     }
 
     @Test

@@ -1,11 +1,34 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@+id/title"
+<!-- A row: a stripe for the kind (amber while it plays), the position in the
+     show, the title. Compact: a phone has little width to spare. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="56dp"
-    android:gravity="center_vertical"
-    android:paddingStart="12dp"
-    android:paddingEnd="12dp"
-    android:textSize="20sp"
-    android:maxLines="1"
-    android:ellipsize="end" />
+    android:orientation="horizontal"
+    android:gravity="center_vertical">
+
+    <View
+        android:id="@+id/stripe"
+        android:layout_width="4dp"
+        android:layout_height="match_parent" />
+
+    <TextView
+        android:id="@+id/number"
+        android:layout_width="40dp"
+        android:layout_height="wrap_content"
+        android:gravity="end"
+        android:paddingEnd="12dp"
+        android:textSize="13sp"
+        android:textColor="@color/text_faint"
+        android:maxLines="1" />
+
+    <TextView
+        android:id="@+id/title"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:paddingEnd="12dp"
+        android:textSize="19sp"
+        android:maxLines="1"
+        android:ellipsize="end" />
+</LinearLayout>

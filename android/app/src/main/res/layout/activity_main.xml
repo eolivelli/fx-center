@@ -3,9 +3,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
+    android:background="@color/bg"
     android:padding="8dp">
 
-    <!-- Setup row: small on purpose; it is not for show time. -->
+    <!-- Setup row: small and quiet on purpose; it is not for show time. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
@@ -13,31 +14,42 @@
         android:gravity="center_vertical">
 
         <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginEnd="8dp"
+            android:text="FX CENTER"
+            android:textColor="@color/accent"
+            android:textSize="14sp"
+            android:textStyle="bold" />
+
+        <TextView
             android:id="@+id/source"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:textColor="@color/text_dim"
             android:textSize="12sp"
-            android:maxLines="2"
-            android:ellipsize="middle" />
+            android:maxLines="1"
+            android:ellipsize="end" />
 
         <Button
             android:id="@+id/documents"
-            style="?android:attr/buttonBarButtonStyle"
+            style="@style/ToolButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/documents" />
 
         <Button
             android:id="@+id/drive"
-            style="?android:attr/buttonBarButtonStyle"
+            style="@style/ToolButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/drive" />
 
         <Button
             android:id="@+id/refresh"
-            style="?android:attr/buttonBarButtonStyle"
+            style="@style/ToolButton"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/refresh" />
@@ -48,43 +60,73 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:divider="#e0e0e0"
+        android:layout_marginTop="4dp"
+        android:padding="1dp"
+        android:background="@drawable/list_frame"
+        android:divider="@color/bg"
         android:dividerHeight="1dp"
-        android:background="#ffffff" />
+        android:listSelector="@android:color/transparent" />
 
-    <TextView
-        android:id="@+id/now_playing"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:textSize="18sp"
-        android:textStyle="bold"
-        android:maxLines="1"
-        android:ellipsize="end"
-        android:text=" " />
-
+    <!-- What plays, or what plays next. -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:gravity="center_vertical">
-
-        <ProgressBar
-            android:id="@+id/progress"
-            style="?android:attr/progressBarStyleHorizontal"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:max="1000" />
+        android:layout_marginTop="8dp"
+        android:orientation="vertical"
+        android:background="@drawable/card"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingTop="8dp"
+        android:paddingBottom="8dp">
 
         <TextView
-            android:id="@+id/time"
-            android:layout_width="wrap_content"
+            android:id="@+id/now_label"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            android:textSize="14sp"
-            android:minWidth="90dp"
-            android:gravity="end" />
+            android:text="@string/next"
+            android:textColor="@color/text_dim"
+            android:textSize="11sp"
+            android:textStyle="bold"
+            android:letterSpacing="0.05" />
+
+        <TextView
+            android:id="@+id/now_playing"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textColor="@color/text"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:text=" " />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+
+            <ProgressBar
+                android:id="@+id/progress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:progressTint="@color/accent"
+                android:progressBackgroundTint="@color/bg"
+                android:max="1000" />
+
+            <TextView
+                android:id="@+id/time"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:textColor="@color/text_dim"
+                android:textSize="14sp"
+                android:minWidth="90dp"
+                android:gravity="end" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- The transport: GO twice as wide as the others, all tall enough to hit
@@ -92,38 +134,38 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="88dp"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="6dp"
         android:orientation="horizontal">
 
         <Button
             android:id="@+id/go"
+            style="@style/Transport"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="2"
             android:layout_marginEnd="6dp"
-            android:backgroundTint="@color/go"
-            android:textColor="#ffffff"
+            android:backgroundTint="@color/go_tint"
             android:textSize="26sp"
             android:text="@string/go" />
 
         <Button
             android:id="@+id/pause"
+            style="@style/Transport"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:layout_marginEnd="6dp"
-            android:backgroundTint="@color/pause"
-            android:textColor="#ffffff"
+            android:backgroundTint="@color/pause_tint"
             android:textSize="16sp"
             android:text="@string/pause" />
 
         <Button
             android:id="@+id/stop"
+            style="@style/Transport"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            android:backgroundTint="@color/stop"
-            android:textColor="#ffffff"
+            android:backgroundTint="@color/stop_tint"
             android:textSize="20sp"
             android:text="@string/stop" />
     </LinearLayout>
@@ -131,13 +173,17 @@
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:orientation="horizontal"
         android:gravity="center_vertical">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:textColor="@color/text_dim"
+            android:textSize="11sp"
+            android:textStyle="bold"
             android:text="@string/volume" />
 
         <SeekBar
@@ -145,6 +191,9 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:progressTint="@color/text_dim"
+            android:progressBackgroundTint="@color/raised"
+            android:thumbTint="@color/text_dim"
             android:max="100" />
     </LinearLayout>
 
@@ -152,6 +201,8 @@
         android:id="@+id/status"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
+        android:layout_marginStart="4dp"
+        android:textColor="@color/text_dim"
         android:textSize="12sp"
         android:maxLines="2"
         android:ellipsize="end"
