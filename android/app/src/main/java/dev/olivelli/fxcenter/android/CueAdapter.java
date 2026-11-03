@@ -18,10 +18,31 @@ import dev.olivelli.fxcenter.core.ShowController;
 final class CueAdapter extends ArrayAdapter<Cue> {
 
     private final ShowController controller;
+    /** Where in the library each row is: every cue, unless the search box filters. */
+    private int[] visible = new int[0];
 
     CueAdapter(Context context, ShowController controller) {
         super(context, R.layout.row_cue);
         this.controller = controller;
+    }
+
+    void setVisible(int[] visible) {
+        this.visible = visible;
+    }
+
+    /** The library position of a row, or -1. */
+    int cueAt(int row) {
+        return row >= 0 && row < visible.length ? visible[row] : -1;
+    }
+
+    /** The row showing the cue at a library position, or -1 if the filter hides it. */
+    int rowOf(int index) {
+        for (int i = 0; i < visible.length; i++) {
+            if (visible[i] == index) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     @Override
@@ -30,8 +51,9 @@ final class CueAdapter extends ArrayAdapter<Cue> {
                 : LayoutInflater.from(getContext()).inflate(R.layout.row_cue, parent, false);
         Context c = getContext();
         Cue cue = getItem(position);
-        boolean playing = position == controller.playingIndex();
-        boolean selected = position == controller.selectedIndex();
+        int index = cueAt(position); // where it is in the show, whatever the filter
+        boolean playing = index == controller.playingIndex();
+        boolean selected = index == controller.selectedIndex();
         boolean cached = controller.source() != null && controller.source().isLocallyAvailable(cue);
         int kind = c.getColor(cue.kind() == Cue.Kind.MUSIC ? R.color.music
                 : cue.kind() == Cue.Kind.EFFECT ? R.color.effect : R.color.text_dim);
@@ -41,7 +63,7 @@ final class CueAdapter extends ArrayAdapter<Cue> {
                 : selected ? kind : dim(kind));
 
         TextView number = row.findViewById(R.id.number);
-        number.setText(numberText(position, playing));
+        number.setText(numberText(index, playing));
         number.setTextColor(c.getColor(playing ? R.color.accent : R.color.text_faint));
 
         TextView title = row.findViewById(R.id.title);

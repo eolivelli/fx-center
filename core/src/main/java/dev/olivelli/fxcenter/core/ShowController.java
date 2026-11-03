@@ -81,13 +81,19 @@ public final class ShowController implements AudioPlayer.Listener {
     private Cue playingCue;
 
     /** Lists the source; blocking. Falls back to the last Drive listing when offline. */
-    public void refresh() {
+    /**
+     * Lists the source again.
+     *
+     * @return false when the listing failed and the list shown is the one
+     *         saved last time (or nothing changed); the reason went to {@link Listener#error}
+     */
+    public boolean refresh() {
         LibrarySource s;
         synchronized (this) {
             s = source;
         }
         if (s == null) {
-            return;
+            return false;
         }
         try {
             Library lib = s.list();
@@ -96,6 +102,7 @@ public final class ShowController implements AudioPlayer.Listener {
             if (!warnings.isEmpty()) {
                 listener.error(Scaletta.FILE_NAME + ": " + String.join("; ", warnings));
             }
+            return true;
         } catch (IOException e) {
             Library fallback = s instanceof DriveFolderSource ? ((DriveFolderSource) s).lastListing() : null;
             if (fallback != null && !fallback.isEmpty()) {
@@ -104,11 +111,49 @@ public final class ShowController implements AudioPlayer.Listener {
             } else {
                 listener.error(e.getMessage());
             }
+            return false;
         }
     }
 
+    /**
+     * The line to leave on screen once {@link #refresh} and {@link #downloadAll}
+     * are done; {@link #refreshWentWrong} says whether to show it as an error.
+     */
+    public String refreshSummary(boolean fresh, int failures, String lastError) {
+        Library lib = library();
+        StringBuilder sb = new StringBuilder();
+        int ready = 0;
+        LibrarySource s = source();
+        for (Cue c : lib.cues()) {
+            if (s != null && s.isLocallyAvailable(c)) {
+                ready++;
+            }
+        }
+        sb.append(ready == lib.cues().size() ? lib.cues().size() + " brani pronti"
+                : ready + " brani pronti su " + lib.cues().size());
+        if (!fresh) {
+            sb.append(". Elenco dell'ultima volta");
+        }
+        if (failures > 0) {
+            sb.append(". ").append(failures).append(failures == 1 ? " non scaricato" : " non scaricati");
+        }
+        List<String> warnings = lib.scaletta().warnings();
+        if (!warnings.isEmpty()) {
+            sb.append(". ").append(Scaletta.FILE_NAME).append(": ").append(String.join("; ", warnings));
+        }
+        if ((!fresh || failures > 0) && lastError != null && !lastError.isEmpty()) {
+            sb.append(". ").append(lastError);
+        }
+        return sb.toString();
+    }
+
+    public boolean refreshWentWrong(boolean fresh, int failures) {
+        return !fresh || failures > 0 || !library().scaletta().warnings().isEmpty();
+    }
+
     /** Downloads every cue not yet local; blocking. */
-    public void downloadAll(Progress progress) {
+    /** Downloads what is missing; the number of files that failed (each one reported to {@link Listener#error}). */
+    public int downloadAll(Progress progress) {
         List<Cue> cues;
         LibrarySource s;
         synchronized (this) {
@@ -116,7 +161,7 @@ public final class ShowController implements AudioPlayer.Listener {
             s = source;
         }
         if (s == null) {
-            return;
+            return 0;
         }
         int failures = 0;
         for (Cue c : cues) {
@@ -134,6 +179,7 @@ public final class ShowController implements AudioPlayer.Listener {
         if (failures == 0) {
             listener.changed();
         }
+        return failures;
     }
 
     public synchronized Library library() {

@@ -2,6 +2,7 @@ package dev.olivelli.fxcenter.desktop;
 
 import dev.olivelli.fxcenter.core.Clip;
 import dev.olivelli.fxcenter.core.Cue;
+import dev.olivelli.fxcenter.core.CueFilter;
 import dev.olivelli.fxcenter.core.Defaults;
 import dev.olivelli.fxcenter.core.Document;
 import dev.olivelli.fxcenter.core.DriveClient;
@@ -57,6 +58,7 @@ import javax.swing.JPopupMenu;
 import javax.swing.JProgressBar;
 import javax.swing.JScrollPane;
 import javax.swing.JSlider;
+import javax.swing.JTextField;
 import javax.swing.KeyStroke;
 import javax.swing.ListSelectionModel;
 import javax.swing.SwingUtilities;
@@ -96,6 +98,10 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     private final JPanel editBar = new JPanel(new BorderLayout(8, 0));
     private final JButton saveButton = new JButton("Salva");
     private boolean syncingSelection;
+    private final JTextField search = new JTextField();
+    private final JLabel searchCount = new JLabel();
+    /** Where in the library the rows of the list are: every cue, unless the search box filters. */
+    private int[] visible = new int[0];
 
     private final GoogleLogin login;
     private final ScalettaStore store;
@@ -133,6 +139,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
                 System.exit(0);
             }
         });
+        setIconImages(AppIcon.images());
         setSize(900, 700);
         setMinimumSize(new Dimension(600, 450));
         setLocationRelativeTo(null);
@@ -212,7 +219,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         list.setCellRenderer(new CueRenderer());
         list.addListSelectionListener(e -> {
             if (!e.getValueIsAdjusting() && !syncingSelection && list.getSelectedIndex() >= 0) {
-                controller.select(list.getSelectedIndex());
+                controller.select(cueAt(list.getSelectedIndex()));
             }
         });
         MouseAdapter mouse = new MouseAdapter() {
@@ -257,7 +264,12 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         JScrollPane scroll = new JScrollPane(list);
         scroll.setBorder(BorderFactory.createLineBorder(Theme.BORDER));
         scroll.getViewport().setBackground(Theme.SURFACE);
-        root.add(scroll, BorderLayout.CENTER);
+        JPanel centre = new JPanel(new BorderLayout(0, 6));
+        centre.setOpaque(false);
+        buildSearch();
+        centre.add(search, BorderLayout.NORTH);
+        centre.add(scroll, BorderLayout.CENTER);
+        root.add(centre, BorderLayout.CENTER);
 
         // Bottom: what plays (a card), then the transport.
         JPanel bottom = new JPanel();
@@ -353,6 +365,10 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_P, 0), "pause", () -> run(controller::pauseOrResume));
         list.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "go");
         list.getActionMap().put("go", action(this::go));
+        bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_F, InputEvent.CTRL_DOWN_MASK), "search", () -> {
+            search.requestFocusInWindow();
+            search.selectAll();
+        });
         bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_UP, InputEvent.ALT_DOWN_MASK), "moveUp", () -> moveSelected(-1));
         bind(root, KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, InputEvent.ALT_DOWN_MASK), "moveDown", () -> moveSelected(1));
         list.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "clip");
@@ -363,6 +379,93 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         }));
 
         new Timer(200, e -> updateProgress()).start();
+    }
+
+    /**
+     * The search box above the list: typing filters the list at once, the ✕
+     * clears it, and GO on a found song clears it too, leaving that song
+     * selected where it sits in the show.
+     */
+    private void buildSearch() {
+        search.setFont(Theme.font(16f, Font.PLAIN));
+        search.putClientProperty("JTextField.placeholderText", "Cerca un brano…   (Ctrl+F)");
+        search.putClientProperty("JTextField.showClearButton", true);
+        search.putClientProperty("JTextField.leadingIcon", new com.formdev.flatlaf.icons.FlatSearchIcon());
+        searchCount.setFont(Theme.font(12f, Font.PLAIN));
+        searchCount.setForeground(Theme.TEXT_DIM);
+        searchCount.setBorder(BorderFactory.createEmptyBorder(0, 6, 0, 6));
+        search.putClientProperty("JTextField.trailingComponent", searchCount);
+        search.putClientProperty("FlatLaf.style", "background: " + Theme.hex(Theme.SURFACE) + "; margin: 6,8,6,8");
+        search.getDocument().addDocumentListener(new javax.swing.event.DocumentListener() {
+            @Override
+            public void insertUpdate(javax.swing.event.DocumentEvent e) {
+                filterChanged();
+            }
+
+            @Override
+            public void removeUpdate(javax.swing.event.DocumentEvent e) {
+                filterChanged();
+            }
+
+            @Override
+            public void changedUpdate(javax.swing.event.DocumentEvent e) {
+                filterChanged();
+            }
+        });
+        // While typing, space and P are letters, not GO and PAUSA. (The typed
+        // character still reaches the field: it is a separate key event.)
+        AbstractAction letter = action(() -> { });
+        search.getActionMap().put("letter", letter);
+        search.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "letter");
+        search.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_P, 0), "letter");
+        // Enter or ↓: on to the results, the first one selected unless the selection is among them.
+        Runnable toList = () -> {
+            if (visible.length == 0) {
+                return;
+            }
+            if (rowOf(controller.selectedIndex()) < 0) {
+                controller.select(visible[0]);
+            }
+            list.requestFocusInWindow();
+        };
+        search.getActionMap().put("toList", action(toList));
+        search.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_ENTER, 0), "toList");
+        search.getInputMap().put(KeyStroke.getKeyStroke(KeyEvent.VK_DOWN, 0), "toList");
+    }
+
+    private CueFilter filter() {
+        return CueFilter.of(search.getText());
+    }
+
+    private void filterChanged() {
+        changed();
+        int row = rowOf(controller.selectedIndex());
+        if (row >= 0) {
+            list.ensureIndexIsVisible(row);
+        } else if (visible.length > 0) {
+            list.ensureIndexIsVisible(0);
+        }
+    }
+
+    private void clearSearch() {
+        if (!search.getText().isEmpty()) {
+            search.setText("");
+        }
+    }
+
+    /** The library position of a row of the list, or -1. */
+    private int cueAt(int row) {
+        return row >= 0 && row < visible.length ? visible[row] : -1;
+    }
+
+    /** The row showing the cue at a library position, or -1 if the filter hides it. */
+    private int rowOf(int index) {
+        for (int i = 0; i < visible.length; i++) {
+            if (visible[i] == index) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private static JButton bigButton(String text, Color bg) {
@@ -460,6 +563,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         if (editing()) {
             return;
         }
+        clearSearch(); // moving songs in a filtered list would be confusing
         beforeEdit = controller.library();
         dirty = false;
         updateEditUi();
@@ -468,6 +572,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     private void updateEditUi() {
         boolean on = editing();
         editBar.setVisible(on);
+        search.setEnabled(!on);
         for (JButton b : sourceButtons) {
             b.setEnabled(!on);
         }
@@ -628,18 +733,18 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     private void refreshAndDownload() {
         setStatus("Aggiorno l'elenco…");
         run(() -> {
-            controller.refresh();
-            controller.downloadAll((what, done, total) -> SwingUtilities.invokeLater(() ->
+            lastError = null;
+            boolean fresh = controller.refresh();
+            int failures = controller.downloadAll((what, done, total) -> SwingUtilities.invokeLater(() ->
                     setStatus("Scarico " + what + (total > 0 ? "  " + (done * 100 / total) + "%" : ""))));
+            String summary = controller.refreshSummary(fresh, failures, lastError);
+            boolean wrong = controller.refreshWentWrong(fresh, failures);
+            // What went wrong stays on screen: it is why a song is missing or not where expected.
             SwingUtilities.invokeLater(() -> {
-                Library lib = controller.library();
-                List<String> warnings = lib.scaletta().warnings();
-                if (warnings.isEmpty()) {
-                    setStatus(lib.cues().size() + " brani pronti");
+                if (wrong) {
+                    error(summary);
                 } else {
-                    // Keep the scaletta's problems on screen: they are why a cue is not where expected.
-                    error(lib.cues().size() + " brani pronti. " + Scaletta.FILE_NAME + ": "
-                            + String.join("; ", warnings));
+                    setStatus(summary);
                 }
             });
         });
@@ -720,6 +825,8 @@ final class MainWindow extends JFrame implements ShowController.Listener {
     // --- transport -------------------------------------------------------
 
     private void go() {
+        // Playing a found song ends the search: the full show comes back, with that song selected.
+        clearSearch();
         Cue cue = controller.selectedCue();
         if (cue != null && !controller.source().isLocallyAvailable(cue)) {
             setStatus("Scarico " + cue.title() + "…");
@@ -748,17 +855,20 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         Library lib = controller.library();
         syncingSelection = true;
         try {
-            if (model.size() != lib.cues().size() || !sameCues(lib)) {
+            CueFilter f = filter();
+            visible = f.visible(lib.cues());
+            if (model.size() != visible.length || !sameCues(lib)) {
                 model.clear();
-                for (Cue c : lib.cues()) {
-                    model.addElement(c);
+                for (int i : visible) {
+                    model.addElement(lib.cues().get(i));
                 }
             }
-            int sel = controller.selectedIndex();
-            if (sel != list.getSelectedIndex()) {
-                if (sel >= 0) {
-                    list.setSelectedIndex(sel);
-                    list.ensureIndexIsVisible(sel);
+            searchCount.setText(f.isActive() ? visible.length + " di " + lib.cues().size() : "");
+            int row = rowOf(controller.selectedIndex());
+            if (row != list.getSelectedIndex()) {
+                if (row >= 0) {
+                    list.setSelectedIndex(row);
+                    list.ensureIndexIsVisible(row);
                 } else {
                     list.clearSelection();
                 }
@@ -811,7 +921,7 @@ final class MainWindow extends JFrame implements ShowController.Listener {
 
     private boolean sameCues(Library lib) {
         for (int i = 0; i < model.size(); i++) {
-            if (!model.get(i).equals(lib.cues().get(i))) {
+            if (!model.get(i).equals(lib.cues().get(visible[i]))) {
                 return false;
             }
         }
@@ -835,8 +945,12 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         return s / 60 + ":" + String.format("%02d", s % 60);
     }
 
+    /** The last error reported, so the summary after a refresh can say why. */
+    private volatile String lastError;
+
     @Override
     public void error(String message) {
+        lastError = message;
         SwingUtilities.invokeLater(() -> {
             status.setForeground(Theme.ERROR);
             status.setText(message);
@@ -885,13 +999,14 @@ final class MainWindow extends JFrame implements ShowController.Listener {
         @Override
         public Component getListCellRendererComponent(JList<? extends Cue> l, Cue cue, int index, boolean selected,
                                                       boolean focused) {
-            boolean playing = index == controller.playingIndex();
+            int position = cueAt(index); // where it is in the show, whatever the filter
+            boolean playing = position == controller.playingIndex();
             boolean cached = controller.source() != null && controller.source().isLocallyAvailable(cue);
             Color kind = cue.kind() == Cue.Kind.MUSIC ? Theme.MUSIC
                     : cue.kind() == Cue.Kind.EFFECT ? Theme.EFFECT : Theme.TEXT_DIM;
             stripe = playing ? Theme.ACCENT : selected ? kind : kind.darker().darker();
             setBackground(playing ? Theme.ACCENT_BG : selected ? Theme.SELECTION : Theme.SURFACE);
-            number.setText(playing ? "▶" : editing() ? "≡  " + (index + 1) : String.valueOf(index + 1));
+            number.setText(playing ? "▶" : editing() ? "≡  " + (position + 1) : String.valueOf(position + 1));
             number.setForeground(playing ? Theme.ACCENT : Theme.TEXT_FAINT);
             title.setText(cue.title());
             title.setForeground(playing ? Theme.ACCENT : !cached ? Theme.TEXT_DIM : Theme.TEXT);

@@ -7,7 +7,11 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.text.Editable;
+import android.text.TextWatcher;
 import android.view.View;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputMethodManager;
 import android.view.WindowManager;
 import android.widget.Button;
 import android.widget.EditText;
@@ -20,6 +24,7 @@ import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import dev.olivelli.fxcenter.core.Cue;
+import dev.olivelli.fxcenter.core.CueFilter;
 import dev.olivelli.fxcenter.core.Defaults;
 import dev.olivelli.fxcenter.core.Document;
 import dev.olivelli.fxcenter.core.DriveClient;
@@ -50,6 +55,9 @@ public final class MainActivity extends Activity implements ShowController.Liste
 
     private ListView list;
     private TextView source;
+    private EditText search;
+    private TextView searchCount;
+    private View searchClear;
     private TextView nowLabel;
     private TextView nowPlaying;
     private TextView time;
@@ -98,11 +106,44 @@ public final class MainActivity extends Activity implements ShowController.Liste
         stop = findViewById(R.id.stop);
 
         list.setAdapter(adapter);
-        list.setOnItemClickListener((parent, view, position, id) -> controller.select(position));
+        list.setOnItemClickListener((parent, view, position, id) -> {
+            hideKeyboard(); // so GO is in sight
+            controller.select(adapter.cueAt(position));
+        });
         list.setOnItemLongClickListener((parent, view, position, id) -> {
-            controller.select(position);
+            controller.select(adapter.cueAt(position));
             doGo();
             return true;
+        });
+        search = findViewById(R.id.search);
+        searchCount = findViewById(R.id.search_count);
+        searchClear = findViewById(R.id.search_clear);
+        search.addTextChangedListener(new TextWatcher() {
+            @Override
+            public void beforeTextChanged(CharSequence s, int start, int count, int after) {
+            }
+
+            @Override
+            public void onTextChanged(CharSequence s, int start, int before, int count) {
+            }
+
+            @Override
+            public void afterTextChanged(Editable s) {
+                searchClear.setVisibility(s.length() > 0 ? View.VISIBLE : View.GONE);
+                changed();
+                list.setSelection(0);
+            }
+        });
+        search.setOnEditorActionListener((v, actionId, event) -> {
+            if (actionId == EditorInfo.IME_ACTION_SEARCH) {
+                hideKeyboard(); // the results stay; tap one, then GO
+                return true;
+            }
+            return false;
+        });
+        searchClear.setOnClickListener(v -> {
+            clearSearch();
+            hideKeyboard();
         });
         go.setOnClickListener(v -> doGo());
         stop.setOnClickListener(v -> run(controller::stop));
@@ -160,10 +201,20 @@ public final class MainActivity extends Activity implements ShowController.Liste
     private void refreshAndDownload() {
         setStatus("Aggiorno l'elenco…");
         run(() -> {
-            controller.refresh();
-            controller.downloadAll((what, done, total) -> main.post(() ->
+            lastError = null;
+            boolean fresh = controller.refresh();
+            int failures = controller.downloadAll((what, done, total) -> main.post(() ->
                     setStatus("Scarico " + what + (total > 0 ? "  " + (done * 100 / total) + "%" : ""))));
-            main.post(() -> setStatus(controller.library().cues().size() + " brani pronti"));
+            String summary = controller.refreshSummary(fresh, failures, lastError);
+            boolean wrong = controller.refreshWentWrong(fresh, failures);
+            // What went wrong stays on screen: it is why a song is missing or not where expected.
+            main.post(() -> {
+                if (wrong) {
+                    showError(summary);
+                } else {
+                    setStatus(summary);
+                }
+            });
         });
     }
 
@@ -223,6 +274,9 @@ public final class MainActivity extends Activity implements ShowController.Liste
     }
 
     private void doGo() {
+        // Playing a found song ends the search: the full show comes back, with that song selected.
+        clearSearch();
+        hideKeyboard();
         Cue cue = controller.selectedCue();
         if (cue != null && controller.source() != null && !controller.source().isLocallyAvailable(cue)) {
             setStatus("Scarico " + cue.title() + "…");
@@ -249,13 +303,21 @@ public final class MainActivity extends Activity implements ShowController.Liste
             return;
         }
         Library lib = controller.library();
-        if (adapter.getCount() != lib.cues().size() || !sameCues(lib)) {
+        CueFilter filter = CueFilter.of(search == null ? "" : search.getText().toString());
+        int[] visible = filter.visible(lib.cues());
+        adapter.setVisible(visible);
+        if (adapter.getCount() != visible.length || !sameCues(lib, visible)) {
             adapter.setNotifyOnChange(false);
             adapter.clear();
-            adapter.addAll(lib.cues());
+            for (int i : visible) {
+                adapter.add(lib.cues().get(i));
+            }
         }
         adapter.notifyDataSetChanged();
-        int sel = controller.selectedIndex();
+        if (searchCount != null) {
+            searchCount.setText(filter.isActive() ? getString(R.string.search_count, visible.length, lib.cues().size()) : "");
+        }
+        int sel = adapter.rowOf(controller.selectedIndex());
         if (sel >= 0 && (sel < list.getFirstVisiblePosition() || sel > list.getLastVisiblePosition())) {
             list.smoothScrollToPosition(sel);
         }
@@ -293,9 +355,23 @@ public final class MainActivity extends Activity implements ShowController.Liste
         nowPlaying.setTextColor(getColor(titleColor));
     }
 
-    private boolean sameCues(Library lib) {
+    private void clearSearch() {
+        if (search.length() > 0) {
+            search.setText("");
+        }
+    }
+
+    private void hideKeyboard() {
+        InputMethodManager imm = getSystemService(InputMethodManager.class);
+        if (imm != null) {
+            imm.hideSoftInputFromWindow(search.getWindowToken(), 0);
+        }
+        search.clearFocus();
+    }
+
+    private boolean sameCues(Library lib, int[] visible) {
         for (int i = 0; i < adapter.getCount(); i++) {
-            if (!adapter.getItem(i).equals(lib.cues().get(i))) {
+            if (!adapter.getItem(i).equals(lib.cues().get(visible[i]))) {
                 return false;
             }
         }
@@ -319,12 +395,18 @@ public final class MainActivity extends Activity implements ShowController.Liste
         return s / 60 + ":" + String.format("%02d", s % 60);
     }
 
+    /** The last error reported, so the summary after a refresh can say why. */
+    private volatile String lastError;
+
     @Override
     public void error(String message) {
-        main.post(() -> {
-            status.setTextColor(getColor(R.color.error));
-            status.setText(message);
-        });
+        lastError = message;
+        main.post(() -> showError(message));
+    }
+
+    private void showError(String message) {
+        status.setTextColor(getColor(R.color.error));
+        status.setText(message);
     }
 
     private void setStatus(String message) {

@@ -51,11 +51,23 @@ public interface HttpTransport {
                 }
             }
             c.disconnect();
-            throw new IOException("HTTP " + status + " per " + url
-                    + (detail.isEmpty() ? "" : ": " + abbreviate(detail)));
+            throw new IOException(describe(status, url, detail));
         }
         return new Response(c.getInputStream(), c.getContentLengthLong());
     };
+
+    /**
+     * A failed request, in words a user can act on: Google's "automated
+     * queries" page named for what it is, and the API key left out of the URL.
+     */
+    static String describe(int status, String url, String detail) {
+        if (status == 403 && detail.contains("automated queries")) {
+            return "Google ha bloccato per un po' i download da questa rete (troppe richieste ravvicinate): "
+                    + "riprova più tardi con Aggiorna";
+        }
+        String shown = url.replaceAll("([?&])key=[^&]*&?", "$1").replaceAll("[?&]$", "");
+        return "HTTP " + status + " per " + shown + (detail.isEmpty() ? "" : ": " + abbreviate(detail));
+    }
 
     static String abbreviate(String s) {
         return s.length() > 300 ? s.substring(0, 300) + "…" : s;

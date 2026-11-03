@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * A shared Drive folder, read through a local cache.
@@ -41,10 +43,49 @@ public final class DriveFolderSource implements LibrarySource {
         Library library = client.listFolder(folderId);
         Library.ScalettaInfo info = library.scaletta();
         if (info.present()) {
-            String text = client.downloadText(info.fileId());
-            // Drive's own checksum when it gives one: it is what the save compares against.
-            library = Scaletta.parse(text).arrange(library, info.fileId(),
-                    info.md5() != null ? info.md5() : Scaletta.md5(text));
+            // A copy of the text, so a scaletta.txt that cannot be downloaded
+            // does not cost the fresh listing: new files still show, removed
+            // ones still go.
+            Path copy = folderDir().resolve(Scaletta.FILE_NAME);
+            String text;
+            String md5;
+            String problem = null;
+            try {
+                text = client.downloadText(info.fileId());
+                // Drive's own checksum when it gives one: it is what the save compares against.
+                md5 = info.md5() != null ? info.md5() : Scaletta.md5(text);
+                Files.createDirectories(copy.getParent());
+                Files.write(copy, text.getBytes(StandardCharsets.UTF_8));
+            } catch (IOException e) {
+                Library last = lastListing();
+                if (Files.isRegularFile(copy)) {
+                    text = new String(Files.readAllBytes(copy), StandardCharsets.UTF_8);
+                    // the copy's own checksum: saving over a newer version on Drive is then a conflict
+                    md5 = Scaletta.md5(text);
+                    problem = "non riesco a scaricarlo, uso la copia dell'ultima volta";
+                } else if (last.scaletta().present()) {
+                    // no copy yet (saved by older versions): the order and clips of the last listing
+                    text = Scaletta.format(last.cues(), last.scaletta().orphanLines());
+                    md5 = last.scaletta().md5();
+                    problem = "non riesco a scaricarlo, uso l'ordine dell'ultima volta";
+                } else {
+                    // never read: the songs as they are now, in name order. No checksum, so a save
+                    // from here asks before overwriting the order nobody has seen.
+                    text = "";
+                    md5 = null;
+                    problem = "non riesco a scaricarlo e non ne ho una copia: brani in ordine alfabetico";
+                }
+                problem += " (" + e.getMessage() + ")";
+            }
+            library = text.isEmpty() && md5 == null ? library : Scaletta.parse(text).arrange(library, info.fileId(), md5);
+            if (problem != null) {
+                Library.ScalettaInfo s = library.scaletta();
+                List<String> warnings = new ArrayList<>();
+                warnings.add(problem);
+                warnings.addAll(s.warnings());
+                library = Library.ordered(library.cues(), library.documents(),
+                        new Library.ScalettaInfo(true, info.fileId(), md5, s.orphanLines(), warnings));
+            }
         }
         LibraryFile.save(library, folderDir().resolve("library.json"));
         return library;

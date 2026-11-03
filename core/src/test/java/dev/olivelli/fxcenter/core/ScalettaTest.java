@@ -120,6 +120,52 @@ class ScalettaTest {
     }
 
     @Test
+    void aScalettaThatCannotBeDownloadedUsesTheLastCopyWithTheFreshListing(@TempDir Path cache) throws IOException {
+        String scaletta = "{\"id\":\"S\",\"name\":\"scaletta.txt\",\"mimeType\":\"text/plain\",\"size\":\"9\",\"md5Checksum\":\"ss\"}";
+        String a = "{\"id\":\"A\",\"name\":\"a.mp3\",\"mimeType\":\"audio/mpeg\",\"size\":\"1\"}";
+        String b = "{\"id\":\"B\",\"name\":\"b.mp3\",\"mimeType\":\"audio/mpeg\",\"size\":\"1\"}";
+        String c = "{\"id\":\"C\",\"name\":\"c.mp3\",\"mimeType\":\"audio/mpeg\",\"size\":\"1\"}";
+        FakeHttp first = new FakeHttp()
+                .on("/files?", "{\"files\":[" + a + "," + b + "," + scaletta + "]}")
+                .on("/files/S?alt=media", "b.mp3 | 0:03 - 0:09\na.mp3\n");
+        new DriveFolderSource(new DriveClient(first, "KEY"), "FOLDER", cache).list();
+
+        // later: a.mp3 removed, c.mp3 added, and scaletta.txt cannot be downloaded
+        FakeHttp later = new FakeHttp().on("/files?", "{\"files\":[" + b + "," + c + "," + scaletta + "]}");
+        Library lib = new DriveFolderSource(new DriveClient(later, "KEY"), "FOLDER", cache).list();
+        assertEquals(List.of("b.mp3", "c.mp3"), names(lib));
+        assertEquals(Clip.of(3_000, 9_000), lib.cues().get(0).clip());
+        assertEquals(Scaletta.md5("b.mp3 | 0:03 - 0:09\na.mp3\n"), lib.scaletta().md5());
+        assertTrue(lib.scaletta().warnings().get(0).startsWith("non riesco a scaricarlo"));
+
+        // no copy of the text (an older version listed it): the last listing's order and clips
+        java.nio.file.Files.delete(cache.resolve("FOLDER").resolve(Scaletta.FILE_NAME));
+        Library rebuilt = new DriveFolderSource(new DriveClient(later, "KEY"), "FOLDER", cache).list();
+        assertEquals(List.of("b.mp3", "c.mp3"), names(rebuilt));
+        assertEquals(Clip.of(3_000, 9_000), rebuilt.cues().get(0).clip());
+
+        // never read at all: the fresh songs in name order, and no checksum, so a save asks first
+        FakeHttp none = new FakeHttp().on("/files?", "{\"files\":[" + c + "," + b + "," + scaletta + "]}");
+        Library blind = new DriveFolderSource(new DriveClient(none, "KEY"), "OTHER", cache).list();
+        assertEquals(List.of("b.mp3", "c.mp3"), names(blind));
+        assertTrue(blind.scaletta().present());
+        assertEquals("S", blind.scaletta().fileId());
+        assertEquals(null, blind.scaletta().md5());
+        assertTrue(blind.scaletta().warnings().get(0).contains("ordine alfabetico"));
+    }
+
+    @Test
+    void googlesAutomatedQueriesPageIsNamedAndTheKeyIsNotShown() {
+        String blocked = HttpTransport.describe(403, "https://x/files/F?alt=media&key=SECRET",
+                "<html>... your computer or network may be sending automated queries ...</html>");
+        assertTrue(blocked.startsWith("Google ha bloccato"), blocked);
+        String other = HttpTransport.describe(404, "https://x/files/F?alt=media&key=SECRET&x=1", "nope");
+        assertFalse(other.contains("SECRET"), other);
+        assertTrue(other.contains("alt=media") && other.contains("x=1"), other);
+        assertFalse(HttpTransport.describe(404, "https://x/files?key=SECRET", "").contains("key"));
+    }
+
+    @Test
     void clipLength() {
         assertEquals(87_500, Clip.of(12_500, 100_000).lengthMillis(300_000));
         assertEquals(270_000, Clip.of(30_000, -1).lengthMillis(300_000));

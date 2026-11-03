@@ -12,6 +12,9 @@
     <string name="drive_bad_link">Non sembra un link di una cartella di Google Drive</string>
     <string name="no_documents">Nessun documento nella cartella</string>
     <string name="volume">VOLUME</string>
+    <string name="search_hint">Cerca un brano…</string>
+    <string name="search_clear">Cancella la ricerca</string>
+    <string name="search_count">%1$d di %2$d</string>
     <string name="next">PROSSIMO</string>
     <string name="on_air">IN ONDA</string>
     <string name="paused">IN PAUSA</string>

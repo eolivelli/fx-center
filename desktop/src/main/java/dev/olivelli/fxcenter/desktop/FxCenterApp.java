@@ -18,6 +18,7 @@ public final class FxCenterApp {
 
     public static void main(String[] args) {
         Theme.install();
+        DesktopEntry.install();
         SwingUtilities.invokeLater(() -> new MainWindow(homeDir()).setVisible(true));
     }
 }
